@@ -110,7 +110,6 @@ end
 
 function M.open_code_window()
     local selected = get_visual_selection()
-    print(selected)
     create_split()
     
     api.nvim_buf_set_option(left_buf, 'modifiable', true)
