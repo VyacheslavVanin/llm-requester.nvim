@@ -1,1 +1,1 @@
-lua require('ollama-code').setup({ model = "llama" })
+lua require('llm-requester').setup({ model = "llama" })
