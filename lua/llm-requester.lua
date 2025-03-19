@@ -75,7 +75,7 @@ end
 
 function M.send_request()
     local code = table.concat(api.nvim_buf_get_lines(left_buf, 0, -1, false), '\n')
-    local prompt = config.prompt .. code
+    local prompt = code
     
     api.nvim_buf_set_option(right_buf, 'modifiable', true)
     api.nvim_buf_set_lines(right_buf, 0, -1, false, {'=== Ollama Response ===', '', 'Waiting for response...'})
@@ -112,9 +112,8 @@ function M.send_request()
 end
 
 function M.open_code_window()
-    local selected = get_visual_selection()
+    local selected = config.prompt .. get_visual_selection()
     create_split()
-    
     api.nvim_buf_set_option(left_buf, 'modifiable', true)
     api.nvim_buf_set_lines(left_buf, 0, -1, false, vim.split(selected, '\n', {}))
     
