@@ -122,6 +122,7 @@ end
 
 vim.api.nvim_create_user_command('LLMRequester', M.open_code_window, { range = true })
 vim.keymap.set('v', config.open_prompt_window_key, M.open_code_window, { desc = 'Open LLMRequester window' })
+vim.keymap.set('n', config.open_prompt_window_key, M.open_code_window, { desc = 'Open LLMRequester window' })
 
 return M
 
