@@ -72,7 +72,9 @@ function M.show_completion()
         focusable = true,
         zindex = 100,
     })
-    vim.api.nvim_feedkeys('<Esc>', 'n', false)
+    vim.api.nvim_feedkeys(
+        vim.api.nvim_replace_termcodes('<Esc>', true, false, true), 'n', true
+    )
 
     vim.api.nvim_win_set_option(completion_win, 'winhl', 'Normal:' .. config.completion_menu_hl)
     vim.api.nvim_win_set_option(completion_win, 'winblend', 10)
