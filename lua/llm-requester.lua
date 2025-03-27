@@ -13,14 +13,139 @@ local config = {
     request_keys = '<leader>r',
     close_keys = '<leader>q',
     stream = false,
+    completion_keys = {
+        trigger = '<C-Tab>',
+        confirm = '<Tab>',
+    },
+    completion_context_lines = 3, -- number of lines before/after cursor to use as context
+    completion_menu_height = 10,
+    completion_menu_width = 50,
+    completion_menu_hl = 'NormalFloat',
+    completion_menu_border = 'rounded',
 }
 
 local ns_id = api.nvim_create_namespace('llm_requester')
 local prompt_buf, response_buf
 local prompt_win, response_win
+local completion_win, completion_buf
+
+local function setup_completion()
+    vim.api.nvim_create_autocmd('BufEnter', {
+        callback = function()
+            local buf = vim.api.nvim_get_current_buf()
+            vim.keymap.set('i', config.completion_keys.trigger, function()
+                M.show_completion()
+                return ''
+            end, { buffer = buf, expr = true })
+        end
+    })
+end
 
 function M.setup(user_config)
     config = vim.tbl_extend('force', config, user_config or {})
+    setup_completion()
+end
+
+function M.show_completion()
+    local cursor = vim.api.nvim_win_get_cursor(0)
+    local line = cursor[1] - 1
+    local lines = vim.api.nvim_buf_get_lines(0, 
+        math.max(0, line - config.completion_context_lines), 
+        line + config.completion_context_lines + 1, 
+        false)
+    local context = table.concat(lines, '\n')
+
+    completion_buf = vim.api.nvim_create_buf(false, false) -- Don't create as scratch buffer
+    vim.api.nvim_buf_set_option(completion_buf, 'buftype', 'nofile')
+    vim.api.nvim_buf_set_option(completion_buf, 'bufhidden', 'wipe')
+    vim.api.nvim_buf_set_option(completion_buf, 'swapfile', false)
+    vim.api.nvim_buf_set_option(completion_buf, 'undolevels', -1) -- Disable undo
+    --vim.api.nvim_buf_set_lines(completion_buf, 0, -1, false, {'Loading completions...'})
+
+    completion_win = vim.api.nvim_open_win(completion_buf, false, {
+        relative = 'cursor',
+        style = 'minimal',
+        width = config.completion_menu_width,
+        height = 1, -- Start with 1 line for loading message
+        row = 1,
+        col = 0,
+        border = config.completion_menu_border,
+        focusable = false,
+        zindex = 100,
+    })
+
+    vim.api.nvim_win_set_option(completion_win, 'winhl', 'Normal:' .. config.completion_menu_hl)
+    vim.api.nvim_win_set_option(completion_win, 'winblend', 10)
+
+    -- Setup key mappings before API call
+    local keys = {
+        [config.completion_keys.confirm] = function()
+            local selection = vim.api.nvim_get_current_line()
+            vim.api.nvim_win_close(completion_win, true)
+            vim.api.nvim_buf_delete(completion_buf, { force = true })
+            -- Insert text at current cursor position
+            local row, col = unpack(vim.api.nvim_win_get_cursor(0))
+            vim.api.nvim_buf_set_text(0, row-1, col, row-1, col, {selection})
+            return ''
+        end,
+        __default = function()
+            vim.api.nvim_win_close(completion_win, true)
+            vim.api.nvim_buf_delete(completion_buf, { force = true })
+            return vim.api.nvim_replace_termcodes('<Ignore>', true, false, true)
+        end,
+    }
+
+    -- Set key mappings in insert mode only with proper options
+    vim.keymap.set('i', '<Esc>', keys.__default, {
+        buffer = completion_buf,
+        nowait = true,
+        silent = true
+    })
+    vim.keymap.set('i', config.completion_keys.confirm, keys[config.completion_keys.confirm], {
+        buffer = completion_buf,
+        nowait = true,
+        silent = true,
+        expr = true
+    })
+
+    local json_data = vim.json.encode({
+        model = config.model,
+        prompt = "Complete this code context:\n"..context.."\n\nPossible completions:",
+        stream = false,
+        options = { temperature = 0.2 }
+    })
+
+    fn.jobstart({'curl', '-s', '-X', 'POST', config.url, '-d', json_data}, {
+        on_stdout = function(_, data)
+            local response = table.concat(data, '')
+            local ok, result = pcall(vim.json.decode, response)
+            if ok and result.response then
+                local suggestions = {}
+                for line in vim.gsplit(result.response, '\n') do
+                    if line ~= '' then
+                        table.insert(suggestions, line)
+                    end
+                end
+                vim.schedule(function()
+                    if vim.api.nvim_win_is_valid(completion_win) then
+                        vim.api.nvim_buf_set_lines(completion_buf, 0, -1, false, suggestions)
+                        vim.api.nvim_win_set_height(completion_win, 
+                            math.min(#suggestions, config.completion_menu_height))
+                    end
+                end)
+            end
+        end,
+        on_exit = function(_, code)
+            if code ~= 0 then
+                vim.schedule(function()
+                    if vim.api.nvim_win_is_valid(completion_win) then
+                        vim.api.nvim_buf_set_lines(completion_buf, 0, -1, false, 
+                            {'Error getting completions'})
+                    end
+                end)
+            end
+        end
+    })
 end
 
 -- Helper function to set up buffer/window options
