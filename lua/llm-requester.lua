@@ -55,14 +55,13 @@ function M.show_completion()
         false)
     local context = table.concat(lines, '\n')
 
-    completion_buf = vim.api.nvim_create_buf(false, false) -- Don't create as scratch buffer
+    completion_buf = vim.api.nvim_create_buf(false, true)
     vim.api.nvim_buf_set_option(completion_buf, 'buftype', 'nofile')
     vim.api.nvim_buf_set_option(completion_buf, 'bufhidden', 'wipe')
     vim.api.nvim_buf_set_option(completion_buf, 'swapfile', false)
     vim.api.nvim_buf_set_option(completion_buf, 'undolevels', -1) -- Disable undo
-    --vim.api.nvim_buf_set_lines(completion_buf, 0, -1, false, {'Loading completions...'})
 
-    completion_win = vim.api.nvim_open_win(completion_buf, false, {
+    completion_win = vim.api.nvim_open_win(completion_buf, true, {
         relative = 'cursor',
         style = 'minimal',
         width = config.completion_menu_width,
@@ -70,9 +69,10 @@ function M.show_completion()
         row = 1,
         col = 0,
         border = config.completion_menu_border,
-        focusable = false,
+        focusable = true,
         zindex = 100,
     })
+    vim.api.nvim_feedkeys('<Esc>', 'n', false)
 
     vim.api.nvim_win_set_option(completion_win, 'winhl', 'Normal:' .. config.completion_menu_hl)
     vim.api.nvim_win_set_option(completion_win, 'winblend', 10)
@@ -82,31 +82,20 @@ function M.show_completion()
         [config.completion_keys.confirm] = function()
             local selection = vim.api.nvim_get_current_line()
             vim.api.nvim_win_close(completion_win, true)
-            vim.api.nvim_buf_delete(completion_buf, { force = true })
-            -- Insert text at current cursor position
+            -- Insert text and restore insert mode if needed
             local row, col = unpack(vim.api.nvim_win_get_cursor(0))
-            vim.api.nvim_buf_set_text(0, row-1, col, row-1, col, {selection})
+            vim.api.nvim_put({selection}, 'c', false, true)
             return ''
         end,
         __default = function()
             vim.api.nvim_win_close(completion_win, true)
-            vim.api.nvim_buf_delete(completion_buf, { force = true })
             return vim.api.nvim_replace_termcodes('<Ignore>', true, false, true)
         end,
     }
 
-    -- Set key mappings in insert mode only with proper options
-    vim.keymap.set('i', '<Esc>', keys.__default, {
-        buffer = completion_buf,
-        nowait = true,
-        silent = true
-    })
-    vim.keymap.set('i', config.completion_keys.confirm, keys[config.completion_keys.confirm], {
-        buffer = completion_buf,
-        nowait = true,
-        silent = true,
-        expr = true
-    })
+    -- Set key mappings in normal mode only with proper options
+    api.nvim_buf_set_keymap(completion_buf, 'n', '<Esc>', '', { callback = keys.__default })
+    api.nvim_buf_set_keymap(completion_buf, 'n', config.completion_keys.confirm, '', { callback = keys[config.completion_keys.confirm] })
 
     local json_data = vim.json.encode({
         model = config.model,
@@ -131,6 +120,7 @@ function M.show_completion()
                         vim.api.nvim_buf_set_lines(completion_buf, 0, -1, false, suggestions)
                         vim.api.nvim_win_set_height(completion_win, 
                             math.min(#suggestions, config.completion_menu_height))
+                        api.nvim_buf_set_option(completion_buf, 'modifiable', false)
                     end
                 end)
             end
@@ -141,6 +131,7 @@ function M.show_completion()
                     if vim.api.nvim_win_is_valid(completion_win) then
                         vim.api.nvim_buf_set_lines(completion_buf, 0, -1, false, 
                             {'Error getting completions'})
+                        api.nvim_buf_set_option(completion_buf, 'modifiable', false)
                     end
                 end)
             end
