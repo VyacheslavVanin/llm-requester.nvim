@@ -82,11 +82,11 @@ function M.show_completion()
     -- Setup key mappings before API call
     local keys = {
         [config.completion_keys.confirm] = function()
-            local selection = vim.api.nvim_get_current_line()
+            local selection = api.nvim_buf_get_lines(completion_buf, 0, -1, false)
             vim.api.nvim_win_close(completion_win, true)
             -- Insert text and restore insert mode if needed
             local row, col = unpack(vim.api.nvim_win_get_cursor(0))
-            vim.api.nvim_put({selection}, 'c', false, true)
+            vim.api.nvim_put(selection, 'c', true, true)
             return ''
         end,
         __default = function()
