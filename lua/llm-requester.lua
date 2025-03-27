@@ -5,7 +5,7 @@ local M = {}
 
 local config = {
     model = 'llama2',
-    url = 'http://localhost:11434/api/generate',
+    url = 'http://localhost:11434/api/chat',
     split_ratio = 0.6,
     prompt_split_ratio = 0.2, -- parameter to control dimensions of prompt and response windows
     prompt = 'Please review, improve, and refactor the following code. Provide your suggestions in markdown format with explanations:\n\n',
@@ -101,7 +101,12 @@ function M.show_completion()
 
     local json_data = vim.json.encode({
         model = config.model,
-        prompt = "Complete this code context:\n"..context.."\n\nPossible completions:",
+        messages = {
+            {
+                role = "user",
+                content = "Complete this code context:\n"..context.."\n\nPossible completions:"
+            }
+        },
         stream = false,
         options = { temperature = 0.2 }
     })
@@ -110,9 +115,9 @@ function M.show_completion()
         on_stdout = function(_, data)
             local response = table.concat(data, '')
             local ok, result = pcall(vim.json.decode, response)
-            if ok and result.response then
+            if ok and result.message and result.message.content then
                 local suggestions = {}
-                for line in vim.gsplit(result.response, '\n') do
+                for line in vim.gsplit(result.message.content, '\n') do
                     if line ~= '' then
                         table.insert(suggestions, line)
                     end
@@ -192,7 +197,12 @@ local function handle_request(stream)
     local code = table.concat(api.nvim_buf_get_lines(prompt_buf, 0, -1, false), '\n')
     local json_data = vim.json.encode({
         model = config.model,
-        prompt = code,
+        messages = {
+            {
+                role = "user",
+                content = code
+            }
+        },
         stream = stream,
         options = { temperature = 0.5 }
     })
@@ -224,9 +234,9 @@ end
 function M.handle_non_streaming_request(_, data)
     local response = table.concat(data, '')
     local ok, result = pcall(vim.json.decode, response)
-    if ok and result.response then
+    if ok and result.message and result.message.content then
         api.nvim_buf_set_option(response_buf, 'modifiable', true)
-        api.nvim_buf_set_lines(response_buf, 2, -1, false, vim.split(result.response, '\n'))
+        api.nvim_buf_set_lines(response_buf, 2, -1, false, vim.split(result.message.content, '\n'))
         api.nvim_buf_set_lines(response_buf, -1, -1, false, {'', '=== Request completed ==='})
         api.nvim_buf_set_option(response_buf, 'modifiable', false)
     end
@@ -240,9 +250,9 @@ function M.handle_streaming_response(_, data)
             for _, l in ipairs(lines) do
                 if l ~= '' then
                     local success, decoded = pcall(vim.json.decode, l)
-                    if success and decoded.response then
+                    if success and decoded.message and decoded.message.content then
                         api.nvim_buf_call(response_buf, function()
-                            api.nvim_put(vim.split(decoded.response, '\n'), 'c', false, true)
+                            api.nvim_put(vim.split(decoded.message.content, '\n'), 'c', false, true)
                         end)
                     end
                 end
