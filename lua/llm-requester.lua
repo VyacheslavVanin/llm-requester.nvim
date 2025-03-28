@@ -9,7 +9,6 @@ local M = {}
 local config = {
     api_type = 'ollama', -- 'ollama' or 'openai'
     model = 'llama2',
-    completion_model = 'llama2', -- Added separate model for completion
     url = 'http://localhost:11434/api/chat',
     openai_url = 'https://openrouter.ai/api/v1/chat/completions',
     openai_api_key = '', -- Set your OpenAI API key here or via setup()
@@ -20,23 +19,26 @@ local config = {
     request_keys = '<leader>r',
     close_keys = '<leader>q',
     stream = false,
-    completion_keys = {
-        trigger = '<C-Tab>',
-        confirm = '<Tab>',
-    },
-    completion_context_lines = 3, -- number of lines before/after cursor to use as context
-    completion_menu_height = 10,
-    completion_menu_width = 50,
-    completion_menu_hl = 'NormalFloat',
-    completion_menu_border = 'rounded',
+    completion = {
+        model = 'llama2',
+        keys = {
+            trigger = '<C-Tab>',
+            confirm = '<Tab>',
+        },
+        context_lines = 3,
+        menu_height = 10,
+        menu_width = 50,
+        menu_hl = 'NormalFloat',
+        menu_border = 'rounded',
+    }
 }
 
 local ns_id = api.nvim_create_namespace('llm_requester')
 
 function M.setup(user_config)
     config = vim.tbl_extend('force', config, user_config or {})
-    Completion.setup(config) -- Call setup from the completion module
-    Chat.setup(config) -- Call setup from the chat module
+    Completion.setup(vim.tbl_extend('force', {url = config.url}, config.completion))
+    Chat.setup(config) -- Chat still uses full config
 end
 
 vim.api.nvim_create_user_command('LLMRequester', Chat.open_code_window, { range = true })

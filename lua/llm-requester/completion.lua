@@ -3,7 +3,21 @@ local fn = vim.fn
 
 local Completion = {}
 
-local config -- Store reference to main config
+local default_config = {
+    model = 'llama2',
+    keys = {
+        trigger = '<C-Tab>',
+        confirm = '<Tab>',
+    },
+    context_lines = 3,
+    menu_height = 10,
+    menu_width = 50,
+    menu_hl = 'NormalFloat',
+    menu_border = 'rounded',
+    url = 'http://localhost:11434/api/chat',
+}
+
+local config = default_config -- Store config
 local completion_win, completion_buf
 
 local completion_system_message = [[
@@ -21,7 +35,7 @@ local function setup_completion_autocmd()
     vim.api.nvim_create_autocmd('BufEnter', {
         callback = function()
             local buf = vim.api.nvim_get_current_buf()
-            vim.keymap.set('i', config.completion_keys.trigger, function()
+            vim.keymap.set('i', config.keys.trigger, function()
                 Completion.show()
                 return ''
             end, { buffer = buf, expr = true, desc = "Show LLM Completion" })
@@ -29,8 +43,10 @@ local function setup_completion_autocmd()
     })
 end
 
-function Completion.setup(main_config)
-    config = main_config -- Store reference
+function Completion.setup(user_config)
+    -- Merge user config with defaults, preserving nested structure
+    local merged = vim.tbl_deep_extend('force', default_config, user_config or {})
+    config = merged
     setup_completion_autocmd()
 end
 
@@ -38,8 +54,8 @@ function Completion.show()
     local cursor = vim.api.nvim_win_get_cursor(0)
     local line = cursor[1] - 1
     local lines = vim.api.nvim_buf_get_lines(0, 
-        math.max(0, line - config.completion_context_lines), 
-        line + config.completion_context_lines + 1, 
+        math.max(0, line - config.context_lines), 
+        line + config.context_lines + 1, 
         false)
     local context = table.concat(lines, '\n')
 
@@ -52,11 +68,11 @@ function Completion.show()
     completion_win = vim.api.nvim_open_win(completion_buf, true, {
         relative = 'cursor',
         style = 'minimal',
-        width = config.completion_menu_width,
+        width = config.menu_width,
         height = 1, -- Start with 1 line for loading message
         row = 1,
         col = 0,
-        border = config.completion_menu_border,
+        border = config.menu_border,
         focusable = true,
         zindex = 100,
     })
@@ -64,12 +80,12 @@ function Completion.show()
         vim.api.nvim_replace_termcodes('<Esc>', true, false, true), 'n', true
     )
 
-    vim.api.nvim_win_set_option(completion_win, 'winhl', 'Normal:' .. config.completion_menu_hl)
+    vim.api.nvim_win_set_option(completion_win, 'winhl', 'Normal:' .. config.menu_hl)
     vim.api.nvim_win_set_option(completion_win, 'winblend', 10)
 
     -- Setup key mappings before API call
     local keys = {
-        [config.completion_keys.confirm] = function()
+        [config.keys.confirm] = function()
             local selection = api.nvim_buf_get_lines(completion_buf, 0, -1, false)
             vim.api.nvim_win_close(completion_win, true)
             -- Insert text and restore insert mode if needed
@@ -85,10 +101,10 @@ function Completion.show()
 
     -- Set key mappings in normal mode only with proper options
     api.nvim_buf_set_keymap(completion_buf, 'n', '<Esc>', '', { callback = keys.__default })
-    api.nvim_buf_set_keymap(completion_buf, 'n', config.completion_keys.confirm, '', { callback = keys[config.completion_keys.confirm] })
+    api.nvim_buf_set_keymap(completion_buf, 'n', config.keys.confirm, '', { callback = keys[config.keys.confirm] })
 
     local json_data = vim.json.encode({
-        model = config.completion_model,
+        model = config.model,
         messages = {
             {
                 role = "system",
@@ -118,7 +134,7 @@ function Completion.show()
                     if vim.api.nvim_win_is_valid(completion_win) then
                         vim.api.nvim_buf_set_lines(completion_buf, 0, -1, false, suggestions)
                         vim.api.nvim_win_set_height(completion_win, 
-                            math.min(#suggestions, config.completion_menu_height))
+                            math.min(#suggestions, config.menu_height))
                         api.nvim_buf_set_option(completion_buf, 'modifiable', false)
                     end
                 end)
