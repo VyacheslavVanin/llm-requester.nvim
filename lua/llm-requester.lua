@@ -7,9 +7,12 @@ local Chat = require('llm-requester.chat') -- Require the chat module
 local M = {}
 
 local config = {
+    api_type = 'ollama', -- 'ollama' or 'openai'
     model = 'llama2',
     completion_model = 'llama2', -- Added separate model for completion
     url = 'http://localhost:11434/api/chat',
+    openai_url = 'https://openrouter.ai/api/v1/chat/completions',
+    openai_api_key = '', -- Set your OpenAI API key here or via setup()
     split_ratio = 0.6,
     prompt_split_ratio = 0.2, -- parameter to control dimensions of prompt and response windows
     prompt = 'Please review, improve, and refactor the following code. Provide your suggestions in markdown format with explanations:\n\n',

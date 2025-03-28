@@ -56,8 +56,40 @@ end
 local function handle_on_exit(_, exit_code)
     if exit_code ~= 0 then
         api.nvim_buf_set_option(response_buf, 'modifiable', true)
-        api.nvim_buf_set_lines(response_buf, 0, -1, false, {'Error: Failed to get response from Ollama'})
+        api.nvim_buf_set_lines(response_buf, 0, -1, false, {'Error: Failed to get response from LLM API'})
         api.nvim_buf_set_option(response_buf, 'modifiable', false)
+    end
+end
+
+local function handle_openai_non_streaming_response(_, data)
+    local response = table.concat(data, '')
+    local ok, result = pcall(vim.json.decode, response)
+    if ok and result.choices and result.choices[1] and result.choices[1].message then
+        api.nvim_buf_set_option(response_buf, 'modifiable', true)
+        api.nvim_buf_set_lines(response_buf, 2, -1, false, vim.split(result.choices[1].message.content, '\n'))
+        api.nvim_buf_set_lines(response_buf, -1, -1, false, {'', '=== Request completed ==='})
+        api.nvim_buf_set_option(response_buf, 'modifiable', false)
+    end
+end
+
+local function handle_openai_streaming_response(_, data)
+    if #data > 0 then
+        for _, line in ipairs(data) do
+            api.nvim_buf_set_option(response_buf, 'modifiable', true)
+            local lines = vim.split(line, '\n', {})
+            for _, l in ipairs(lines) do
+                if l ~= '' and l:find('^data: ') then
+                    local json_str = l:sub(6) -- Remove 'data: ' prefix
+                    local success, decoded = pcall(vim.json.decode, json_str)
+                    if success and decoded.choices and decoded.choices[1] and decoded.choices[1].delta and decoded.choices[1].delta.content then
+                        api.nvim_buf_call(response_buf, function()
+                            api.nvim_put({decoded.choices[1].delta.content}, 'c', false, true)
+                        end)
+                    end
+                end
+            end
+            api.nvim_buf_set_option(response_buf, 'modifiable', false)
+        end
     end
 end
 
@@ -92,8 +124,38 @@ local function handle_streaming_response(_, data)
     end
 end
 
--- Generic request handler
-local function handle_request(stream)
+local function handle_openai_request(stream)
+    local code = table.concat(api.nvim_buf_get_lines(prompt_buf, 0, -1, false), '\n')
+    local json_data = vim.json.encode({
+        model = config.model,
+        messages = {
+            {
+                role = "user",
+                content = code
+            }
+        },
+        stream = stream,
+        temperature = 0.5
+    })
+
+    api.nvim_buf_set_option(response_buf, 'modifiable', true)
+    api.nvim_buf_set_lines(response_buf, 0, -1, false, {'=== OpenAI Response ===', '', 'Waiting for response...'})
+    api.nvim_buf_set_option(response_buf, 'modifiable', false)
+
+    local headers = {
+        'Authorization: Bearer ' .. config.openai_api_key,
+        'Content-Type: application/json'
+    }
+
+    local handle = (stream and handle_openai_streaming_response) or handle_openai_non_streaming_response
+    fn.jobstart({'curl', '-s', '-X', 'POST', config.openai_url, '-H', headers[1], '-H', headers[2], '-d', json_data}, {
+        on_stdout = handle,
+        on_exit = handle_on_exit,
+        stdout_buffered = not stream,
+    })
+end
+
+local function handle_ollama_request(stream)
     local code = table.concat(api.nvim_buf_get_lines(prompt_buf, 0, -1, false), '\n')
     local json_data = vim.json.encode({
         model = config.model,
@@ -117,6 +179,15 @@ local function handle_request(stream)
         on_exit = handle_on_exit,
         stdout_buffered = not stream,
     })
+end
+
+-- Generic request handler
+local function handle_request(stream)
+    if config.api_type == 'openai' then
+        handle_openai_request(stream)
+    else
+        handle_ollama_request(stream)
+    end
 end
 
 function Chat.setup(main_config)
