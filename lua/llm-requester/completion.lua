@@ -1,0 +1,141 @@
+local api = vim.api
+local fn = vim.fn
+
+local Completion = {}
+
+local config -- Store reference to main config
+local completion_win, completion_buf
+
+local completion_system_message = [[
+You are an advanced AI language model designed to provide intelligent and contextually relevant assistance. Your primary function is to understand the user's intent behind their queries or requests, and then deliver precise continuation to user's code.
+
+To achieve this, consider the following guidelines:
+
+Understand the user's intent and provide relevant, concise code completion suggestions in plain text format.
+Your task is to simulate a smart code completion system that provides correct code snippets.
+NEVER enclose you response in markdown code tags.
+ALWAYS Reply with just code that shoulld follow the user code, without explanations, comments, markdown, and other words other just program snippet because your output will be added to the user's program and it should work.
+]]
+
+local function setup_completion_autocmd()
+    vim.api.nvim_create_autocmd('BufEnter', {
+        callback = function()
+            local buf = vim.api.nvim_get_current_buf()
+            vim.keymap.set('i', config.completion_keys.trigger, function()
+                Completion.show()
+                return ''
+            end, { buffer = buf, expr = true, desc = "Show LLM Completion" })
+        end
+    })
+end
+
+function Completion.setup(main_config)
+    config = main_config -- Store reference
+    setup_completion_autocmd()
+end
+
+function Completion.show()
+    local cursor = vim.api.nvim_win_get_cursor(0)
+    local line = cursor[1] - 1
+    local lines = vim.api.nvim_buf_get_lines(0, 
+        math.max(0, line - config.completion_context_lines), 
+        line + config.completion_context_lines + 1, 
+        false)
+    local context = table.concat(lines, '\n')
+
+    completion_buf = vim.api.nvim_create_buf(false, true)
+    vim.api.nvim_buf_set_option(completion_buf, 'buftype', 'nofile')
+    vim.api.nvim_buf_set_option(completion_buf, 'bufhidden', 'wipe')
+    vim.api.nvim_buf_set_option(completion_buf, 'swapfile', false)
+    vim.api.nvim_buf_set_option(completion_buf, 'undolevels', -1) -- Disable undo
+
+    completion_win = vim.api.nvim_open_win(completion_buf, true, {
+        relative = 'cursor',
+        style = 'minimal',
+        width = config.completion_menu_width,
+        height = 1, -- Start with 1 line for loading message
+        row = 1,
+        col = 0,
+        border = config.completion_menu_border,
+        focusable = true,
+        zindex = 100,
+    })
+    vim.api.nvim_feedkeys(
+        vim.api.nvim_replace_termcodes('<Esc>', true, false, true), 'n', true
+    )
+
+    vim.api.nvim_win_set_option(completion_win, 'winhl', 'Normal:' .. config.completion_menu_hl)
+    vim.api.nvim_win_set_option(completion_win, 'winblend', 10)
+
+    -- Setup key mappings before API call
+    local keys = {
+        [config.completion_keys.confirm] = function()
+            local selection = api.nvim_buf_get_lines(completion_buf, 0, -1, false)
+            vim.api.nvim_win_close(completion_win, true)
+            -- Insert text and restore insert mode if needed
+            local row, col = unpack(vim.api.nvim_win_get_cursor(0))
+            vim.api.nvim_put(selection, 'c', true, true)
+            return ''
+        end,
+        __default = function()
+            vim.api.nvim_win_close(completion_win, true)
+            return vim.api.nvim_replace_termcodes('<Ignore>', true, false, true)
+        end,
+    }
+
+    -- Set key mappings in normal mode only with proper options
+    api.nvim_buf_set_keymap(completion_buf, 'n', '<Esc>', '', { callback = keys.__default })
+    api.nvim_buf_set_keymap(completion_buf, 'n', config.completion_keys.confirm, '', { callback = keys[config.completion_keys.confirm] })
+
+    local json_data = vim.json.encode({
+        model = config.completion_model,
+        messages = {
+            {
+                role = "system",
+                content = completion_system_message
+            },
+            {
+                role = "user",
+                content = context
+            }
+        },
+        stream = false,
+        options = { temperature = 0.2 }
+    })
+
+    fn.jobstart({'curl', '-s', '-X', 'POST', config.url, '-d', json_data}, {
+        on_stdout = function(_, data)
+            local response = table.concat(data, '')
+            local ok, result = pcall(vim.json.decode, response)
+            if ok and result.message and result.message.content then
+                local suggestions = {}
+                for line in vim.gsplit(result.message.content, '\n') do
+                    if line ~= '' then
+                        table.insert(suggestions, line)
+                    end
+                end
+                vim.schedule(function()
+                    if vim.api.nvim_win_is_valid(completion_win) then
+                        vim.api.nvim_buf_set_lines(completion_buf, 0, -1, false, suggestions)
+                        vim.api.nvim_win_set_height(completion_win, 
+                            math.min(#suggestions, config.completion_menu_height))
+                        api.nvim_buf_set_option(completion_buf, 'modifiable', false)
+                    end
+                end)
+            end
+        end,
+        on_exit = function(_, code)
+            if code ~= 0 then
+                vim.schedule(function()
+                    if vim.api.nvim_win_is_valid(completion_win) then
+                        vim.api.nvim_buf_set_lines(completion_buf, 0, -1, false, 
+                            {'Error getting completions'})
+                        api.nvim_buf_set_option(completion_buf, 'modifiable', false)
+                    end
+                end)
+            end
+        end
+    })
+end
+
+return Completion

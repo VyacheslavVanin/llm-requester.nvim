@@ -7,7 +7,7 @@ DEST_DIR="$HOME/.config/nvim/lua"
 # Create the destination directory if it doesn't exist
 mkdir -p "$DEST_DIR"
 
-# Copy the plugin files to the Neovim configuration directory
-cp -r "$SOURCE_DIR/lua/llm-requester.lua" "$DEST_DIR/"
+# Copy the entire lua directory to the Neovim configuration directory
+cp -r "$SOURCE_DIR/lua/"* "$DEST_DIR/"
 
 echo "llm-requester plugin installed successfully."
