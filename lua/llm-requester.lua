@@ -5,6 +5,7 @@ local M = {}
 
 local config = {
     model = 'llama2',
+    completion_model = 'llama2', -- Added separate model for completion
     url = 'http://localhost:11434/api/chat',
     split_ratio = 0.6,
     prompt_split_ratio = 0.2, -- parameter to control dimensions of prompt and response windows
@@ -100,7 +101,7 @@ function M.show_completion()
     api.nvim_buf_set_keymap(completion_buf, 'n', config.completion_keys.confirm, '', { callback = keys[config.completion_keys.confirm] })
 
     local json_data = vim.json.encode({
-        model = config.model,
+        model = config.completion_model,
         messages = {
             {
                 role = "user",
