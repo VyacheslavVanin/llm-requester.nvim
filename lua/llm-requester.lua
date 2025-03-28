@@ -25,6 +25,17 @@ local config = {
     completion_menu_border = 'rounded',
 }
 
+local completion_system_message = [[
+You are an advanced AI language model designed to provide intelligent and contextually relevant assistance. Your primary function is to understand the user's intent behind their queries or requests, and then deliver precise continuation to user's code.
+
+To achieve this, consider the following guidelines:
+
+Understand the user's intent and provide relevant, concise code completion suggestions in plain text format.
+Your task is to simulate a smart code completion system that provides correct code snippets.
+NEVER enclose you response in markdown code tags.
+ALWAYS Reply with just code that shoulld follow the user code, without explanations, comments, markdown, and other words other just program snippet because your output will be added to the user's program and it should work.
+]]
+
 local ns_id = api.nvim_create_namespace('llm_requester')
 local prompt_buf, response_buf
 local prompt_win, response_win
@@ -104,8 +115,12 @@ function M.show_completion()
         model = config.completion_model,
         messages = {
             {
+                role = "system",
+                content = completion_system_message
+            },
+            {
                 role = "user",
-                content = "Complete this code context:\n"..context.."\n\nPossible completions:"
+                content = context
             }
         },
         stream = false,
