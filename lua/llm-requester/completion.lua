@@ -4,7 +4,7 @@ local fn = vim.fn
 local Completion = {}
 
 local default_config = {
-    model = 'llama2',
+    ollama_model = 'llama2',
     keys = {
         trigger = '<C-Tab>',
         confirm = '<Tab>',
@@ -104,7 +104,7 @@ function Completion.show()
     api.nvim_buf_set_keymap(completion_buf, 'n', config.keys.confirm, '', { callback = keys[config.keys.confirm] })
 
     local json_data = vim.json.encode({
-        model = config.model,
+        model = config.ollama_model,
         messages = {
             {
                 role = "system",

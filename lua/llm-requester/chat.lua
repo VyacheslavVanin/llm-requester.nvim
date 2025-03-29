@@ -3,7 +3,24 @@ local fn = vim.fn
 
 local Chat = {}
 
-local config -- Store reference to main config
+Chat.default_config = {
+    api_type = 'ollama', -- 'ollama' or 'openai'
+    ollama_model = 'llama2',
+    ollama_url = 'http://localhost:11434/api/chat',
+    openai_model = 'llama2',
+    openai_url = 'https://openrouter.ai/api/v1/chat/completions',
+    openai_api_key = '', -- Set your OpenAI API key here or via setup()
+
+    split_ratio = 0.6,
+    prompt_split_ratio = 0.2, -- parameter to control dimensions of prompt and response windows
+    prompt = 'Please review, improve, and refactor the following code. Provide your suggestions in markdown format with explanations:\n\n',
+    open_prompt_window_key = '<leader>ai',
+    request_keys = '<leader>r',
+    close_keys = '<leader>q',
+    stream = false,
+}
+
+local config = vim.deepcopy(Chat.default_config)
 local prompt_buf, response_buf
 local prompt_win, response_win
 
@@ -127,7 +144,7 @@ end
 local function handle_openai_request(stream)
     local code = table.concat(api.nvim_buf_get_lines(prompt_buf, 0, -1, false), '\n')
     local json_data = vim.json.encode({
-        model = config.model,
+        model = config.openai_model,
         messages = {
             {
                 role = "user",
@@ -158,7 +175,7 @@ end
 local function handle_ollama_request(stream)
     local code = table.concat(api.nvim_buf_get_lines(prompt_buf, 0, -1, false), '\n')
     local json_data = vim.json.encode({
-        model = config.model,
+        model = config.ollama_model,
         messages = {
             {
                 role = "user",
@@ -174,7 +191,7 @@ local function handle_ollama_request(stream)
     api.nvim_buf_set_option(response_buf, 'modifiable', false)
 
     local handle = (stream and handle_streaming_response) or handle_non_streaming_request
-    fn.jobstart({'curl', '-s', '-X', 'POST', config.url, '-d', json_data}, {
+    fn.jobstart({'curl', '-s', '-X', 'POST', config.ollama_url, '-d', json_data}, {
         on_stdout = handle,
         on_exit = handle_on_exit,
         stdout_buffered = not stream,
@@ -191,8 +208,10 @@ local function handle_request(stream)
 end
 
 function Chat.setup(main_config)
-    config = main_config -- Store reference
+    config = vim.tbl_extend('force', config, main_config or {})
     -- No specific setup needed for chat beyond config access yet
+    vim.keymap.set('v', config.open_prompt_window_key, Chat.open_code_window, { desc = 'Open LLMRequester window' })
+    vim.keymap.set('n', config.open_prompt_window_key, Chat.open_code_window, { desc = 'Open LLMRequester window' })
 end
 
 function Chat.send_request()
