@@ -4,7 +4,12 @@ local fn = vim.fn
 local Completion = {}
 
 local default_config = {
+    api_type = 'ollama', -- 'ollama' or 'openai'
     ollama_model = 'llama2',
+    ollama_url = 'http://localhost:11434/api/chat',
+    openai_model = 'llama2',
+    openai_url = 'https://openrouter.ai/api/v1/chat/completions',
+    openai_api_key = '', -- Set your OpenAI API key here or via setup()
     keys = {
         trigger = '<C-Tab>',
         confirm = '<Tab>',
@@ -14,7 +19,6 @@ local default_config = {
     menu_width = 50,
     menu_hl = 'NormalFloat',
     menu_border = 'rounded',
-    url = 'http://localhost:11434/api/chat',
 }
 
 local config = default_config -- Store config
@@ -103,55 +107,120 @@ function Completion.show()
     api.nvim_buf_set_keymap(completion_buf, 'n', '<Esc>', '', { callback = keys.__default })
     api.nvim_buf_set_keymap(completion_buf, 'n', config.keys.confirm, '', { callback = keys[config.keys.confirm] })
 
-    local json_data = vim.json.encode({
-        model = config.ollama_model,
-        messages = {
-            {
-                role = "system",
-                content = completion_system_message
+    local function handle_openai_request()
+        local json_data = vim.json.encode({
+            model = config.openai_model,
+            messages = {
+                {
+                    role = "system",
+                    content = completion_system_message
+                },
+                {
+                    role = "user",
+                    content = context
+                }
             },
-            {
-                role = "user",
-                content = context
-            }
-        },
-        stream = false,
-        options = { temperature = 0.2 }
-    })
+            stream = false,
+            temperature = 0.2
+        })
 
-    fn.jobstart({'curl', '-s', '-X', 'POST', config.url, '-d', json_data}, {
-        on_stdout = function(_, data)
-            local response = table.concat(data, '')
-            local ok, result = pcall(vim.json.decode, response)
-            if ok and result.message and result.message.content then
-                local suggestions = {}
-                for line in vim.gsplit(result.message.content, '\n') do
-                    if line ~= '' then
-                        table.insert(suggestions, line)
+        local headers = {
+            'Authorization: Bearer ' .. config.openai_api_key,
+            'Content-Type: application/json'
+        }
+
+        fn.jobstart({'curl', '-s', '-X', 'POST', config.openai_url, '-H', headers[1], '-H', headers[2], '-d', json_data}, {
+            on_stdout = function(_, data)
+                local response = table.concat(data, '')
+                local ok, result = pcall(vim.json.decode, response)
+                if ok and result.choices and result.choices[1] and result.choices[1].message then
+                    local suggestions = {}
+                    for line in vim.gsplit(result.choices[1].message.content, '\n') do
+                        if line ~= '' then
+                            table.insert(suggestions, line)
+                        end
                     end
+                    vim.schedule(function()
+                        if vim.api.nvim_win_is_valid(completion_win) then
+                            vim.api.nvim_buf_set_lines(completion_buf, 0, -1, false, suggestions)
+                            vim.api.nvim_win_set_height(completion_win,
+                                math.min(#suggestions, config.menu_height))
+                            api.nvim_buf_set_option(completion_buf, 'modifiable', false)
+                        end
+                    end)
                 end
-                vim.schedule(function()
-                    if vim.api.nvim_win_is_valid(completion_win) then
-                        vim.api.nvim_buf_set_lines(completion_buf, 0, -1, false, suggestions)
-                        vim.api.nvim_win_set_height(completion_win, 
-                            math.min(#suggestions, config.menu_height))
-                        api.nvim_buf_set_option(completion_buf, 'modifiable', false)
-                    end
-                end)
+            end,
+            on_exit = function(_, code)
+                if code ~= 0 then
+                    vim.schedule(function()
+                        if vim.api.nvim_win_is_valid(completion_win) then
+                            vim.api.nvim_buf_set_lines(completion_buf, 0, -1, false,
+                                {'Error getting completions'})
+                            api.nvim_buf_set_option(completion_buf, 'modifiable', false)
+                        end
+                    end)
+                end
             end
-        end,
-        on_exit = function(_, code)
-            if code ~= 0 then
-                vim.schedule(function()
-                    if vim.api.nvim_win_is_valid(completion_win) then
-                        vim.api.nvim_buf_set_lines(completion_buf, 0, -1, false, 
-                            {'Error getting completions'})
-                        api.nvim_buf_set_option(completion_buf, 'modifiable', false)
+        })
+    end
+
+    local function handle_ollama_request()
+        local json_data = vim.json.encode({
+            model = config.ollama_model,
+            messages = {
+                {
+                    role = "system",
+                    content = completion_system_message
+                },
+                {
+                    role = "user",
+                    content = context
+                }
+            },
+            stream = false,
+            options = { temperature = 0.2 }
+        })
+
+        fn.jobstart({'curl', '-s', '-X', 'POST', config.ollama_url, '-d', json_data}, {
+            on_stdout = function(_, data)
+                local response = table.concat(data, '')
+                local ok, result = pcall(vim.json.decode, response)
+                if ok and result.message and result.message.content then
+                    local suggestions = {}
+                    for line in vim.gsplit(result.message.content, '\n') do
+                        if line ~= '' then
+                            table.insert(suggestions, line)
+                        end
                     end
-                end)
+                    vim.schedule(function()
+                        if vim.api.nvim_win_is_valid(completion_win) then
+                            vim.api.nvim_buf_set_lines(completion_buf, 0, -1, false, suggestions)
+                            vim.api.nvim_win_set_height(completion_win,
+                                math.min(#suggestions, config.menu_height))
+                            api.nvim_buf_set_option(completion_buf, 'modifiable', false)
+                        end
+                    end)
+                end
+            end,
+            on_exit = function(_, code)
+                if code ~= 0 then
+                    vim.schedule(function()
+                        if vim.api.nvim_win_is_valid(completion_win) then
+                            vim.api.nvim_buf_set_lines(completion_buf, 0, -1, false,
+                                {'Error getting completions'})
+                            api.nvim_buf_set_option(completion_buf, 'modifiable', false)
+                        end
+                    end)
+                end
             end
-        end
-    })
+        })
+    end
+
+    if config.api_type == 'openai' then
+        handle_openai_request()
+    else
+        handle_ollama_request()
+    end
 end
 
 return Completion
