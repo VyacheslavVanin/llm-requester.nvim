@@ -1,59 +1,81 @@
 # LLMRequester
 
-LLMRequester is a Neovim plugin designed to interact with an AI language model (currently using LLaMA2) and provide feedback on code. It allows you to review, improve, and refactor code by generating suggestions in markdown format.
+LLMRequester is a Neovim plugin that provides two main AI-powered features:
+1. **Chat Interface** - For code review, refactoring suggestions, and general assistance
+2. **Code Completion** - Context-aware intelligent code completions
+
+The plugin supports both Ollama and OpenAI API backends.
 
 ## Installation
 
-To install LLMRequester, you can use your preferred package manager for Neovim.
+Install using your preferred Neovim package manager.
 
-## Usage
+## Features
 
-1. **Open LLMRequester Window**:
-   - You can open the LLMRequester window by pressing `<leader>ai` (default leader is `\`). This will create a vertical split for the prompt and a horizontal split for the response.
+### Chat Interface
+- Open a split window for chat with `<leader>ai` (default)
+- Send requests with `<leader>r`
+- Close windows with `<leader>q`
+- Supports both streaming and non-streaming responses
+- Works with Ollama and OpenAI APIs
 
-2. **Send Request**:
-   - Once you have your code in the prompt window, you can send the request to generate feedback by pressing `<leader>r`.
+### Code Completion
+- Trigger completions with `<C-Tab>` in insert mode
+- Confirm selection with `<Tab>`
+- Context-aware suggestions based on surrounding code
+- Displays in a floating window
 
-3. **Close Window**:
-   - To close both windows, press `<leader>q` (default keymap).
-
-## Configuration Options
-
-You can customize LLMRequester by setting various options through the `setup` function. Here are the available configuration options:
-
-- `model`: The AI model to use (default is `'llama2'`).
-- `url`: The URL of the API endpoint for generating responses (default is `'http://localhost:11434/api/generate'`).
-- `split_ratio`: The ratio of the total width that the prompt window should occupy (default is `0.6`).
-- `prompt_split_ratio`: The ratio of the total height that the prompt window should occupy (default is `0.2`).
-- `prompt`: The initial text to display in the prompt buffer (default is a markdown header asking for code review and refactoring suggestions).
-- `open_prompt_window_key`: The keymap to open the LLMRequester window (default is `<leader>ai`).
-- `request_keys`: The keymap to send the request to generate feedback (default is `<leader>r`).
-- `close_keys`: The keymap to close both windows (default is `<leader>q`).
-- `streaming`: Whether to handle streaming responses (default is `false`).
-
-To set these options, you can use the following code in your Neovim configuration:
+## Configuration
 
 ```lua
-require('LLMRequester').setup({
-    model = 'your-model',
-    url = 'http://your-api-url',
-    split_ratio = 0.7,
-    prompt_split_ratio = 0.3,
-    prompt = '# Code Review and Refactoring Suggestions\n',
-    open_prompt_window_key = '<leader>ar',
-    request_keys = '<leader>rs',
-    close_keys = '<leader>cq',
+require('llm-requester').setup({
+    chat = {
+        api_type = 'ollama', -- 'ollama' or 'openai'
+        ollama_model = 'llama2',
+        ollama_url = 'http://localhost:11434/api/chat',
+        openai_model = 'gpt-4o-mini',
+        openai_url = 'https://api.openai.com/v1/chat/completions',
+        openai_api_key = '', -- Set your OpenAI API key here
+
+        split_ratio = 0.5, -- Width ratio for prompt window
+        prompt_split_ratio = 0.2, -- Height ratio for prompt window
+        prompt = 'Please review and improve this code:\n\n',
+        open_prompt_window_key = '<leader>ai',
+        request_keys = '<leader>r',
+        close_keys = '<leader>q',
+        stream = false, -- Enable streaming responses
+    },
+    completion = {
+        ollama_model = 'llama2',
+        keys = {
+            trigger = '<C-Tab>',
+            confirm = '<Tab>',
+        },
+        context_lines = 3, -- Lines of context to send
+        menu_height = 10, -- Max completion menu height
+        menu_width = 50, -- Completion menu width
+        menu_hl = 'NormalFloat', -- Highlight group
+        menu_border = 'rounded', -- Border style
+        url = 'http://localhost:11434/api/chat',
+    }
 })
 ```
 
 ## Keymaps
 
-- `<leader>ai`: Open the LLMRequester window.
-- `<leader>r`: Send the request to generate feedback.
-- `<leader>q`: Close both windows.
+### Chat
+- `<leader>ai`: Open chat window
+- `<leader>r`: Send request
+- `<leader>q`: Close windows
+
+### Completion
+- `<C-Tab>`: Trigger completions (insert mode)
+- `<Tab>`: Confirm selection
 
 ## Commands
+- `:LLMRequester`: Opens the chat window
 
-- `:LLMRequester`: Opens the LLMRequester window.
-
-By following these steps, you can easily integrate LLMRequester into your Neovim setup and leverage AI-powered code review and refactoring suggestions.
+## Requirements
+- Neovim 0.8+
+- curl (for API requests)
+- Ollama or OpenAI API access
