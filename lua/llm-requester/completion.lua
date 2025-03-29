@@ -3,6 +3,8 @@ local fn = vim.fn
 
 local Completion = {}
 
+local is_completing = false
+
 local default_config = {
     api_type = 'ollama', -- 'ollama' or 'openai'
     ollama_model = 'llama2',
@@ -55,6 +57,11 @@ function Completion.setup(user_config)
 end
 
 function Completion.show()
+    if is_completing then
+        return
+    end
+    is_completing = true
+
     local cursor = vim.api.nvim_win_get_cursor(0)
     local line = cursor[1] - 1
     local lines = vim.api.nvim_buf_get_lines(0, 
@@ -95,10 +102,12 @@ function Completion.show()
             -- Insert text and restore insert mode if needed
             local row, col = unpack(vim.api.nvim_win_get_cursor(0))
             vim.api.nvim_put(selection, 'c', true, true)
+            is_completing = false
             return ''
         end,
         __default = function()
             vim.api.nvim_win_close(completion_win, true)
+            is_completing = false
             return vim.api.nvim_replace_termcodes('<Ignore>', true, false, true)
         end,
     }
