@@ -42,7 +42,7 @@ local function setup_completion_autocmd()
         callback = function()
             local buf = vim.api.nvim_get_current_buf()
             vim.keymap.set('i', config.keys.trigger, function()
-                Completion.show()
+                vim.schedule(Completion.show)
                 return ''
             end, { buffer = buf, expr = true, desc = "Show LLM Completion" })
         end
@@ -64,10 +64,11 @@ function Completion.show()
 
     local cursor = vim.api.nvim_win_get_cursor(0)
     local line = cursor[1] - 1
-    local lines = vim.api.nvim_buf_get_lines(0, 
-        math.max(0, line - config.context_lines), 
-        line + config.context_lines + 1, 
-        false)
+    local lines = vim.api.nvim_buf_get_text(0,
+        math.max(0, line - config.context_lines), 0,
+        line, cursor[2],
+        {}
+    )
     local context = table.concat(lines, '\n')
 
     completion_buf = vim.api.nvim_create_buf(false, true)
@@ -75,6 +76,12 @@ function Completion.show()
     vim.api.nvim_buf_set_option(completion_buf, 'bufhidden', 'wipe')
     vim.api.nvim_buf_set_option(completion_buf, 'swapfile', false)
     vim.api.nvim_buf_set_option(completion_buf, 'undolevels', -1) -- Disable undo
+    vim.api.nvim_create_autocmd('InsertEnter', {
+        buffer = completion_buf,
+        callback = function()
+            vim.cmd('stopinsert')
+        end
+    })
 
     completion_win = vim.api.nvim_open_win(completion_buf, true, {
         relative = 'cursor',
