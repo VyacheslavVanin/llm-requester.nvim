@@ -24,6 +24,8 @@ local config = vim.deepcopy(Chat.default_config)
 local prompt_buf, response_buf
 local prompt_win, response_win
 
+local json_reconstruct = require("llm-requester.json_reconstruct")
+
 -- Helper function to set up buffer/window options
 local function setup_buffer(win, buf, filetype, modifiable)
     api.nvim_win_set_option(win, 'number', true)
@@ -71,6 +73,15 @@ local function create_split()
 end
 
 local function handle_on_exit(_, exit_code)
+    if config.stream then
+        json_reconstruct.finalize(function(complete_json)
+            local success, decoded = pcall(vim.json.decode, complete_json)
+            if success and decoded.message and decoded.message.content then
+                append_to_last_line(response_buf, decoded.message.content)
+            end
+        end)
+    end
+
     if exit_code ~= 0 then
         api.nvim_buf_set_option(response_buf, 'modifiable', true)
         api.nvim_buf_set_lines(response_buf, 0, -1, false, {'Error: Failed to get response from LLM API'})
@@ -89,6 +100,15 @@ local function handle_openai_non_streaming_response(_, data)
     end
 end
 
+local function append_to_last_line(bufnr, text)
+    local last_line = vim.api.nvim_buf_line_count(bufnr) - 1  -- lines are 0-indexed
+    local current_content = vim.api.nvim_buf_get_lines(bufnr, last_line, last_line + 1, false)[1] or ""
+    local inserted_text = vim.split(text, '\n', {})
+    inserted_text[1] = current_content .. inserted_text[1]
+    vim.api.nvim_buf_set_lines(bufnr, last_line, last_line + 1, false, inserted_text)
+  end
+
+
 local function handle_openai_streaming_response(_, data)
     if #data > 0 then
         for _, line in ipairs(data) do
@@ -97,12 +117,12 @@ local function handle_openai_streaming_response(_, data)
             for _, l in ipairs(lines) do
                 if l ~= '' and l:find('^data: ') then
                     local json_str = l:sub(6) -- Remove 'data: ' prefix
-                    local success, decoded = pcall(vim.json.decode, json_str)
-                    if success and decoded.choices and decoded.choices[1] and decoded.choices[1].delta and decoded.choices[1].delta.content then
-                        api.nvim_buf_call(response_buf, function()
-                            api.nvim_put({decoded.choices[1].delta.content}, 'c', false, true)
-                        end)
-                    end
+                    json_reconstruct.process_part(json_str, function(complete_json)
+                        local success, decoded = pcall(vim.json.decode, complete_json)
+                        if success and decoded.choices and decoded.choices[1] and decoded.choices[1].delta and decoded.choices[1].delta.content then
+                            append_to_last_line(response_buf, decoded.choices[1].delta.content)
+                        end
+                    end)
                 end
             end
             api.nvim_buf_set_option(response_buf, 'modifiable', false)
@@ -125,17 +145,12 @@ local function handle_streaming_response(_, data)
     if #data > 0 then
         for _, line in ipairs(data) do
             api.nvim_buf_set_option(response_buf, 'modifiable', true)
-            local lines = vim.split(line, '\n', {})
-            for _, l in ipairs(lines) do
-                if l ~= '' then
-                    local success, decoded = pcall(vim.json.decode, l)
-                    if success and decoded.message and decoded.message.content then
-                        api.nvim_buf_call(response_buf, function()
-                            api.nvim_put(vim.split(decoded.message.content, '\n'), 'c', false, true)
-                        end)
-                    end
+            json_reconstruct.process_part(line, function(complete_json)
+                local success, decoded = pcall(vim.json.decode, complete_json)
+                if success and decoded.message and decoded.message.content then
+                    append_to_last_line(response_buf, decoded.message.content)
                 end
-            end
+            end)
             api.nvim_buf_set_option(response_buf, 'modifiable', false)
         end
     end
