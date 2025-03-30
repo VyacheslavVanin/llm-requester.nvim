@@ -39,6 +39,7 @@ require('llm-requester').setup({
 
         split_ratio = 0.5, -- Width ratio for prompt window
         prompt_split_ratio = 0.2, -- Height ratio for prompt window
+        context_size = 16384, -- maximum context size in tokens
         prompt = 'Please review and improve this code:\n\n',
         open_prompt_window_key = '<leader>ai',
         request_keys = '<leader>r',
@@ -52,6 +53,7 @@ require('llm-requester').setup({
             confirm = '<Tab>',
         },
         context_lines = 3, -- Lines of context to send
+        context_size = 16384, -- maximum context size in tokens
         menu_height = 10, -- Max completion menu height
         menu_width = 50, -- Completion menu width
         menu_hl = 'NormalFloat', -- Highlight group

@@ -16,7 +16,7 @@ local default_config = {
         trigger = '<C-Tab>',
         confirm = '<Tab>',
     },
-    context_lines = 3,
+    context_lines = 20,
     menu_height = 10,
     menu_width = 50,
     menu_hl = 'NormalFloat',
@@ -137,7 +137,8 @@ function Completion.show()
                 }
             },
             stream = false,
-            temperature = 0.2
+            temperature = 0.2,
+            max_tokens = config.context_size
         })
 
         local headers = {
@@ -194,7 +195,10 @@ function Completion.show()
                 }
             },
             stream = false,
-            options = { temperature = 0.2 }
+            options = {
+                temperature = 0.2,
+                num_ctx = config.context_size
+            }
         })
 
         fn.jobstart({'curl', '-s', '-X', 'POST', config.ollama_url, '-d', json_data}, {

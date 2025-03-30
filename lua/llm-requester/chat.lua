@@ -167,7 +167,8 @@ local function handle_openai_request(stream)
             }
         },
         stream = stream,
-        temperature = 0.5
+        temperature = 0.5,
+        max_tokens = config.context_size
     })
 
     api.nvim_buf_set_option(response_buf, 'modifiable', true)
@@ -198,7 +199,10 @@ local function handle_ollama_request(stream)
             }
         },
         stream = stream,
-        options = { temperature = 0.5 }
+        options = {
+            temperature = 0.5,
+            num_ctx = config.context_size
+        }
     })
 
     api.nvim_buf_set_option(response_buf, 'modifiable', true)
