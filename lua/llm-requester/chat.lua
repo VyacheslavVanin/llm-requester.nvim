@@ -25,6 +25,7 @@ local prompt_buf, response_buf
 local prompt_win, response_win
 
 local json_reconstruct = require("llm-requester.json_reconstruct")
+local messages = {}
 
 -- Helper function to set up buffer/window options
 local function setup_buffer(win, buf, filetype, modifiable)
@@ -81,6 +82,11 @@ local function handle_on_exit(_, exit_code)
             end
         end)
     end
+    if exit_code == 0 then
+        local lines = api.nvim_buf_get_lines(response_buf, 2, -1, false)
+        local content = table.concat(lines, '\n')
+        table.insert(messages, {role = "assistant", content = content})
+    end
 
     if exit_code ~= 0 then
         api.nvim_buf_set_option(response_buf, 'modifiable', true)
@@ -136,7 +142,6 @@ local function handle_non_streaming_request(_, data)
     if ok and result.message and result.message.content then
         api.nvim_buf_set_option(response_buf, 'modifiable', true)
         api.nvim_buf_set_lines(response_buf, 2, -1, false, vim.split(result.message.content, '\n'))
-        api.nvim_buf_set_lines(response_buf, -1, -1, false, {'', '=== Request completed ==='})
         api.nvim_buf_set_option(response_buf, 'modifiable', false)
     end
 end
@@ -160,12 +165,7 @@ local function handle_openai_request(stream)
     local code = table.concat(api.nvim_buf_get_lines(prompt_buf, 0, -1, false), '\n')
     local json_data = vim.json.encode({
         model = config.openai_model,
-        messages = {
-            {
-                role = "user",
-                content = code
-            }
-        },
+        messages = messages,
         stream = stream,
         temperature = 0.5,
         max_tokens = config.context_size
@@ -189,15 +189,9 @@ local function handle_openai_request(stream)
 end
 
 local function handle_ollama_request(stream)
-    local code = table.concat(api.nvim_buf_get_lines(prompt_buf, 0, -1, false), '\n')
     local json_data = vim.json.encode({
         model = config.ollama_model,
-        messages = {
-            {
-                role = "user",
-                content = code
-            }
-        },
+        messages = messages,
         stream = stream,
         options = {
             temperature = 0.5,
@@ -219,6 +213,16 @@ end
 
 -- Generic request handler
 local function handle_request(stream)
+    local code = table.concat(api.nvim_buf_get_lines(prompt_buf, 0, -1, false), '\n')
+    if code == "/clear" then
+        messages = {}
+        api.nvim_buf_set_option(response_buf, 'modifiable', true)
+        api.nvim_buf_set_lines(response_buf, 0, -1, false, {})
+        api.nvim_buf_set_option(response_buf, 'modifiable', false)
+        return
+    else
+        table.insert(messages, {role = "user", content = code})
+    end
     if config.api_type == 'openai' then
         handle_openai_request(stream)
     else
