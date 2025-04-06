@@ -17,6 +17,7 @@ Chat.default_config = {
     open_prompt_window_key = '<leader>ai',
     request_keys = '<leader>r',
     close_keys = '<leader>q',
+    history_keys = '<leader>h',
     stream = false,
 }
 
@@ -68,8 +69,10 @@ local function create_split()
         if api.nvim_win_is_valid(response_win) then api.nvim_win_close(response_win, true) end
     end
 
+    api.nvim_buf_set_keymap(prompt_buf, 'i', '<M-CR>', '', { callback = Chat.send_request })
     api.nvim_buf_set_keymap(prompt_buf, 'n', config.request_keys, '', { callback = Chat.send_request })
     api.nvim_buf_set_keymap(prompt_buf, 'n', config.close_keys, '', { callback = close_func })
+    api.nvim_buf_set_keymap(prompt_buf, 'n', config.history_keys, '', { callback = Chat.show_history })
     api.nvim_buf_set_keymap(response_buf, 'n', config.close_keys, '', { callback = close_func })
 end
 
@@ -211,14 +214,28 @@ local function handle_ollama_request(stream)
     })
 end
 
+local function show_in_response_buf(content)
+    api.nvim_buf_set_option(response_buf, 'modifiable', true)
+    api.nvim_buf_set_lines(response_buf, 0, -1, false, content)
+    api.nvim_buf_set_option(response_buf, 'modifiable', false)
+end
+
+local function append_to_response_buf(content)
+    api.nvim_buf_set_option(response_buf, 'modifiable', true)
+    api.nvim_buf_set_lines(response_buf, -1, -1, false, content)
+    api.nvim_buf_set_option(response_buf, 'modifiable', false)
+end
+
+
 -- Generic request handler
 local function handle_request(stream)
     local code = table.concat(api.nvim_buf_get_lines(prompt_buf, 0, -1, false), '\n')
     if code == "/clear" then
         messages = {}
-        api.nvim_buf_set_option(response_buf, 'modifiable', true)
-        api.nvim_buf_set_lines(response_buf, 0, -1, false, {})
-        api.nvim_buf_set_option(response_buf, 'modifiable', false)
+        show_in_response_buf({})
+        return
+    elseif code == "/history" then
+        Chat.show_history()
         return
     else
         table.insert(messages, {role = "user", content = code})
@@ -259,6 +276,16 @@ function Chat.open_code_window()
     api.nvim_buf_set_option(prompt_buf, 'modifiable', true)
     api.nvim_buf_set_lines(prompt_buf, 0, -1, false, vim.split(selected, '\n'))
     api.nvim_set_current_win(prompt_win)
+end
+
+function Chat.show_history()
+    show_in_response_buf({"# History:", ""})
+    for i, value in ipairs(messages) do
+        local role = value.role
+        local content = value.content
+        append_to_response_buf({"## " .. role .. ":", ""})
+        append_to_response_buf(vim.split(content, '\n'))
+    end
 end
 
 return Chat
