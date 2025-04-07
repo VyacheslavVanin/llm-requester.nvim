@@ -18,6 +18,7 @@ Chat.default_config = {
     request_keys = '<leader>r',
     close_keys = '<leader>q',
     history_keys = '<leader>h',
+    clear_keys = '<leader>cc',
     stream = false,
 }
 
@@ -73,7 +74,10 @@ local function create_split()
     api.nvim_buf_set_keymap(prompt_buf, 'n', config.request_keys, '', { callback = Chat.send_request })
     api.nvim_buf_set_keymap(prompt_buf, 'n', config.close_keys, '', { callback = close_func })
     api.nvim_buf_set_keymap(prompt_buf, 'n', config.history_keys, '', { callback = Chat.show_history })
+    api.nvim_buf_set_keymap(prompt_buf, 'n', config.clear_keys, '', { callback = Chat.clear_chat })
     api.nvim_buf_set_keymap(response_buf, 'n', config.close_keys, '', { callback = close_func })
+    api.nvim_buf_set_keymap(response_buf, 'n', config.history_keys, '', { callback = Chat.show_history })
+    api.nvim_buf_set_keymap(response_buf, 'n', config.clear_keys, '', { callback = Chat.clear_chat })
 end
 
 local function handle_on_exit(_, exit_code)
@@ -231,8 +235,7 @@ end
 local function handle_request(stream)
     local code = table.concat(api.nvim_buf_get_lines(prompt_buf, 0, -1, false), '\n')
     if code == "/clear" then
-        messages = {}
-        show_in_response_buf({})
+        Chat.clear_chat()
         return
     elseif code == "/history" then
         Chat.show_history()
@@ -286,6 +289,11 @@ function Chat.show_history()
         append_to_response_buf({"## " .. role .. ":", ""})
         append_to_response_buf(vim.split(content, '\n'))
     end
+end
+
+function Chat.clear_chat()
+    messages = {}
+    show_in_response_buf({})
 end
 
 return Chat

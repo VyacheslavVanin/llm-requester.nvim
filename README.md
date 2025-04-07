@@ -44,6 +44,8 @@ require('llm-requester').setup({
         open_prompt_window_key = '<leader>ai',
         request_keys = '<leader>r',
         close_keys = '<leader>q',
+        history_keys = '<leader>h',
+        clear_keys = '<leader>cc',
         stream = false, -- Enable streaming responses
     },
     completion = {
@@ -69,6 +71,8 @@ require('llm-requester').setup({
 - `<leader>ai`: Open chat window
 - `<leader>r`: Send request
 - `<leader>q`: Close windows
+- `<leader>cc`: Clear chat and history
+- `<leader>h`: Show chat history
 
 ### Completion
 - `<C-Tab>`: Trigger completions (insert mode)
