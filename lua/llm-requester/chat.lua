@@ -184,7 +184,11 @@ local function handle_openai_request(stream)
         max_tokens = config.context_size
     })
 
-    show_in_response_buf({'=== OpenAI Response ===', '', 'Waiting for response...'})
+    if stream then
+        show_in_response_buf({})
+    else
+        show_in_response_buf({'=== OpenAI Response ===', '', 'Waiting for response...'})
+    end
 
     local headers = {
         'Authorization: Bearer ' .. config.openai_api_key,
@@ -210,7 +214,11 @@ local function handle_ollama_request(stream)
         }
     })
 
-    show_in_response_buf({'=== Ollama Response ===', '', 'Waiting for response...'})
+    if stream then
+        show_in_response_buf({})
+    else
+        show_in_response_buf({'=== Ollama Response ===', '', 'Waiting for response...'})
+    end
 
     local handle = (stream and handle_streaming_response) or handle_non_streaming_request
     fn.jobstart({'curl', '-s', '-X', 'POST', config.ollama_url, '-d', json_data}, {
