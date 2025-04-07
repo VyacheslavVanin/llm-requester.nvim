@@ -253,10 +253,21 @@ function Chat.setup(main_config)
     -- No specific setup needed for chat beyond config access yet
     vim.keymap.set('v', config.open_prompt_window_key, Chat.open_code_window, { desc = 'Open LLMRequester window' })
     vim.keymap.set('n', config.open_prompt_window_key, Chat.open_code_window, { desc = 'Open LLMRequester window' })
+    vim.api.nvim_create_user_command('LLMRequester', Chat.open_code_window, { range = true })
+    vim.api.nvim_create_user_command('LLMRequesterSetOllamaModel', Chat.set_ollama_model, { range = true, nargs = 1 })
+    vim.api.nvim_create_user_command('LLMRequesterSetOpenaiModel', Chat.set_openai_model, { range = true, nargs = 1 })
 end
 
 function Chat.send_request()
     handle_request(config.stream)
+end
+
+function Chat.set_ollama_model(attr)
+    config.ollama_model = attr.fargs[1]
+end
+
+function Chat.set_openai_model(attr)
+    config.openai_model = attr.fargs[1]
 end
 
 function Chat.open_code_window()

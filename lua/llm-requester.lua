@@ -66,6 +66,4 @@ function M.setup(user_config)
     Chat.setup(vim.tbl_extend('force', config.chat, chat_config or {}))
 end
 
-vim.api.nvim_create_user_command('LLMRequester', Chat.open_code_window, { range = true })
-
 return M
