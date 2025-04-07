@@ -29,6 +29,18 @@ local prompt_win, response_win
 local json_reconstruct = require("llm-requester.json_reconstruct")
 local messages = {}
 
+local function show_in_response_buf(content)
+    api.nvim_buf_set_option(response_buf, 'modifiable', true)
+    api.nvim_buf_set_lines(response_buf, 0, -1, false, content)
+    api.nvim_buf_set_option(response_buf, 'modifiable', false)
+end
+
+local function append_to_response_buf(content)
+    api.nvim_buf_set_option(response_buf, 'modifiable', true)
+    api.nvim_buf_set_lines(response_buf, -1, -1, false, content)
+    api.nvim_buf_set_option(response_buf, 'modifiable', false)
+end
+
 -- Helper function to set up buffer/window options
 local function setup_buffer(win, buf, filetype, modifiable)
     api.nvim_win_set_option(win, 'number', true)
@@ -70,6 +82,8 @@ local function create_split()
         if api.nvim_win_is_valid(response_win) then api.nvim_win_close(response_win, true) end
     end
 
+    vim.keymap.set('v', config.close_keys, close_func, { desc = 'Close LLMRequester window' })
+    vim.keymap.set('n', config.close_keys, close_func, { desc = 'Close LLMRequester window' })
     api.nvim_buf_set_keymap(prompt_buf, 'i', '<M-CR>', '', { callback = Chat.send_request })
     api.nvim_buf_set_keymap(prompt_buf, 'n', config.request_keys, '', { callback = Chat.send_request })
     api.nvim_buf_set_keymap(prompt_buf, 'n', config.close_keys, '', { callback = close_func })
@@ -96,9 +110,7 @@ local function handle_on_exit(_, exit_code)
     end
 
     if exit_code ~= 0 then
-        api.nvim_buf_set_option(response_buf, 'modifiable', true)
-        api.nvim_buf_set_lines(response_buf, 0, -1, false, {'Error: Failed to get response from LLM API'})
-        api.nvim_buf_set_option(response_buf, 'modifiable', false)
+        show_in_response_buf({'Error: Failed to get response from LLM API'})
     end
 end
 
@@ -106,10 +118,7 @@ local function handle_openai_non_streaming_response(_, data)
     local response = table.concat(data, '')
     local ok, result = pcall(vim.json.decode, response)
     if ok and result.choices and result.choices[1] and result.choices[1].message then
-        api.nvim_buf_set_option(response_buf, 'modifiable', true)
-        api.nvim_buf_set_lines(response_buf, 2, -1, false, vim.split(result.choices[1].message.content, '\n'))
-        api.nvim_buf_set_lines(response_buf, -1, -1, false, {'', '=== Request completed ==='})
-        api.nvim_buf_set_option(response_buf, 'modifiable', false)
+        show_in_response_buf(vim.split(result.choices[1].message.content, '\n'))
     end
 end
 
@@ -147,9 +156,7 @@ local function handle_non_streaming_request(_, data)
     local response = table.concat(data, '')
     local ok, result = pcall(vim.json.decode, response)
     if ok and result.message and result.message.content then
-        api.nvim_buf_set_option(response_buf, 'modifiable', true)
-        api.nvim_buf_set_lines(response_buf, 2, -1, false, vim.split(result.message.content, '\n'))
-        api.nvim_buf_set_option(response_buf, 'modifiable', false)
+        show_in_response_buf(vim.split(result.message.content, '\n'))
     end
 end
 
@@ -169,7 +176,6 @@ local function handle_streaming_response(_, data)
 end
 
 local function handle_openai_request(stream)
-    local code = table.concat(api.nvim_buf_get_lines(prompt_buf, 0, -1, false), '\n')
     local json_data = vim.json.encode({
         model = config.openai_model,
         messages = messages,
@@ -178,9 +184,7 @@ local function handle_openai_request(stream)
         max_tokens = config.context_size
     })
 
-    api.nvim_buf_set_option(response_buf, 'modifiable', true)
-    api.nvim_buf_set_lines(response_buf, 0, -1, false, {'=== OpenAI Response ===', '', 'Waiting for response...'})
-    api.nvim_buf_set_option(response_buf, 'modifiable', false)
+    show_in_response_buf({'=== OpenAI Response ===', '', 'Waiting for response...'})
 
     local headers = {
         'Authorization: Bearer ' .. config.openai_api_key,
@@ -206,9 +210,7 @@ local function handle_ollama_request(stream)
         }
     })
 
-    api.nvim_buf_set_option(response_buf, 'modifiable', true)
-    api.nvim_buf_set_lines(response_buf, 0, -1, false, {'=== Ollama Response ===', '', 'Waiting for response...'})
-    api.nvim_buf_set_option(response_buf, 'modifiable', false)
+    show_in_response_buf({'=== Ollama Response ===', '', 'Waiting for response...'})
 
     local handle = (stream and handle_streaming_response) or handle_non_streaming_request
     fn.jobstart({'curl', '-s', '-X', 'POST', config.ollama_url, '-d', json_data}, {
@@ -217,19 +219,6 @@ local function handle_ollama_request(stream)
         stdout_buffered = not stream,
     })
 end
-
-local function show_in_response_buf(content)
-    api.nvim_buf_set_option(response_buf, 'modifiable', true)
-    api.nvim_buf_set_lines(response_buf, 0, -1, false, content)
-    api.nvim_buf_set_option(response_buf, 'modifiable', false)
-end
-
-local function append_to_response_buf(content)
-    api.nvim_buf_set_option(response_buf, 'modifiable', true)
-    api.nvim_buf_set_lines(response_buf, -1, -1, false, content)
-    api.nvim_buf_set_option(response_buf, 'modifiable', false)
-end
-
 
 -- Generic request handler
 local function handle_request(stream)
@@ -240,9 +229,10 @@ local function handle_request(stream)
     elseif code == "/history" then
         Chat.show_history()
         return
-    else
-        table.insert(messages, {role = "user", content = code})
     end
+
+    table.insert(messages, {role = "user", content = code})
+
     if config.api_type == 'openai' then
         handle_openai_request(stream)
     else
