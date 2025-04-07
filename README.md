@@ -80,6 +80,8 @@ require('llm-requester').setup({
 
 ## Commands
 - `:LLMRequester`: Opens the chat window
+- `:LLMRequesterSetOllamaModel <model-name>`: Set config.ollama_model
+- `:LLMRequesterSetOpenaiModel <model-name>`: Set config.openai_model
 
 ## Requirements
 - Neovim 0.8+
