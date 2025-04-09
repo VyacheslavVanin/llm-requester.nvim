@@ -27,44 +27,42 @@ local config = default_config -- Store config
 local completion_win, completion_buf
 
 local completion_system_message = [[
-**System Prompt:**
-You are Mr.Completer - an expert AI code assistant specializing in precise, context-aware code completion.
-Your task is to analyze the provided code snippet (including prior lines and the incomplete current line)
-and generate the *best possible continuation* that:
+# You are an advanced AI language model designed to provide intelligent and contextually relevant assistance.
 
-0. Your completion will be directly concatinated to user providced code
-1. **Completes *only* the current function, class, or structural block**—do not write unrelated code.
-2. **Matches the implied intent** of the user’s partial code (infer patterns, style, and purpose).
-3. **Produces production-grade quality**:
-   - Clean, efficient, and maintainable (like a senior developer with 10+ years of experience).
-   - Follows language/framework best practices (e.g., PEP 8 for Python, SOLID principles).
-   - Handles edge cases gracefully (e.g., null checks, validation).
-4. **Prioritizes correctness**: Ensure the completion compiles/runs without errors.
-5. **Preserves context**: Maintain variable names, libraries, and idioms from the snippet.
+## User request format
+USER'S TEXT BEFORE CURSOR<<<CURSOR>>>USER'S TEXT AFTER CURSOR
 
-**Response Rules**:
-- Output *only* the completion to provided code (no explanations or notes).
-- Never repeat the user's provided code—just append the completion.
-- If the intent is unclear, complete with a *generic, reusable* implementation.
-- NEVER enclose a completion in markdown code block, insert only raw text
+## Your reply format:
+<completion>HERE YOUR COMPLETION<completion>
+Do not escape html symbols inside tags.
 
-**Example**:  
-User Input (Python):  
-    def calculate_stats(data):  
-        mean = sum(data) / len(data)  
-        variance = sum((x - mean) ** 2  
-Assistant Output:  
-for x in data) / len(data)  
-        return {"mean": mean, "variance": variance}  
+## Task
+User want you to provide completion that will be placed in <<<CURSOR>>> position.
+You must replace '<<<CURSOR>>>' with your completion.
 
-**Example**:  
-User Input (c++):  
-    struct Vector3d {
-Assistant Output:  
-        float x;
-        float y;
-        float z;
-    };
+Complete whole one code block if possible: function, class, loop with body, condition with body and etc.
+Your response combied with user request must form correct expressions of programming language.
+Explain step by step in <explanation> section how your completion solves the task.
+
+
+## Examples
+User input:
+def max(a, b<<<CURSOR>>>
+
+Assistant response:
+<completion>):
+    return a if a > b else b</completion>
+
+User input:  
+def calculate_sum(arr): 
+    total = 0
+    for num in arr:<<<CURSOR>>>
+        return total
+
+Assistant response:  
+User wants calculate sum of array vlues so .... User already have ```return total```, so I will not add it to completion
+<completion>        total += num</completion>
+
 ]]
 
 local function setup_completion_autocmd()
@@ -86,6 +84,29 @@ function Completion.setup(user_config)
     setup_completion_autocmd()
 end
 
+
+function get_context_before(cursor)
+    local line = cursor[1] - 1
+    local lines = vim.api.nvim_buf_get_text(0,
+        math.max(0, line - config.context_lines), 0,
+        line, cursor[2],
+        {}
+    )
+    return table.concat(lines, '\n')
+end
+
+function get_context_after(cursor)
+    local line_count = vim.api.nvim_buf_line_count(0)
+    local line = cursor[1] - 1
+    local lines = vim.api.nvim_buf_get_text(0,
+        line, cursor[2],
+        math.min(line_count-1, line + config.context_lines), 10000,
+        {}
+    )
+    return table.concat(lines, '\n')
+end
+
+
 function Completion.show()
     if is_completing then
         return
@@ -93,13 +114,15 @@ function Completion.show()
     is_completing = true
 
     local cursor = vim.api.nvim_win_get_cursor(0)
-    local line = cursor[1] - 1
-    local lines = vim.api.nvim_buf_get_text(0,
-        math.max(0, line - config.context_lines), 0,
-        line, cursor[2],
-        {}
-    )
-    local context = table.concat(lines, '\n')
+    local context_before = get_context_before(cursor)
+    local context_after = get_context_after(cursor)
+    local context = table.concat({
+        context_before .. '<<<CURSOR>>>' .. context_after,
+    }, '\n') 
+    --local context = table.concat({
+    --    '<pre_cursor>' .. context_before .. '</pre_cursor>',
+    --    '<post_cursor>' .. context_after .. '</post_cursor>',
+    --}, '\n') 
 
     completion_buf = vim.api.nvim_create_buf(false, true)
     vim.api.nvim_buf_set_option(completion_buf, 'buftype', 'nofile')
@@ -153,6 +176,18 @@ function Completion.show()
     api.nvim_buf_set_keymap(completion_buf, 'n', '<Esc>', '', { callback = keys.__default })
     api.nvim_buf_set_keymap(completion_buf, 'n', config.keys.confirm, '', { callback = keys[config.keys.confirm] })
 
+    local function get_text_inside_tags(xml_string, tag_name)
+        -- Construct the regex pattern to match text inside specific tags
+        local pattern = string.format("<%s>(.-)</%s>", tag_name, tag_name)
+    
+        -- Use gmatch to find all matches
+        for _ in string.gmatch(xml_string, pattern) do
+            return _  -- Return the first match found
+        end
+    
+        return nil  -- Return nil if no match is found
+    end
+
     local function handle_openai_request()
         local json_data = vim.json.encode({
             model = config.openai_model,
@@ -182,7 +217,12 @@ function Completion.show()
                 local ok, result = pcall(vim.json.decode, response)
                 if ok and result.choices and result.choices[1] and result.choices[1].message then
                     local suggestions = {}
-                    for line in vim.gsplit(result.choices[1].message.content, '\n') do
+                    local content = get_text_inside_tags(result.choices[1].message.content, 'completion')
+                    if content == nil then
+                        keys.__default()
+                        return
+                    end
+                    for line in vim.gsplit(content, '\n') do
                         if line ~= '' then
                             table.insert(suggestions, line)
                         end
@@ -237,7 +277,12 @@ function Completion.show()
                 local ok, result = pcall(vim.json.decode, response)
                 if ok and result.message and result.message.content then
                     local suggestions = {}
-                    for line in vim.gsplit(result.message.content, '\n') do
+                    local content = get_text_inside_tags(result.message.content, 'completion')
+                    if content == nil then
+                        keys.__default()
+                        return
+                    end
+                    for line in vim.gsplit(content, '\n') do
                         if line ~= '' then
                             table.insert(suggestions, line)
                         end
