@@ -29,16 +29,27 @@ local prompt_win, response_win
 local json_reconstruct = require("llm-requester.json_reconstruct")
 local messages = {}
 
+-- Show content in current buffer exclusivly
 local function show_in_response_buf(content)
     api.nvim_buf_set_option(response_buf, 'modifiable', true)
     api.nvim_buf_set_lines(response_buf, 0, -1, false, content)
     api.nvim_buf_set_option(response_buf, 'modifiable', false)
 end
 
+-- Append lines to current buffer
 local function append_to_response_buf(content)
     api.nvim_buf_set_option(response_buf, 'modifiable', true)
     api.nvim_buf_set_lines(response_buf, -1, -1, false, content)
     api.nvim_buf_set_option(response_buf, 'modifiable', false)
+end
+
+-- Append string to last string if buffer bufnr
+local function append_to_last_line(bufnr, text)
+    local last_line = vim.api.nvim_buf_line_count(bufnr) - 1  -- lines are 0-indexed
+    local current_content = vim.api.nvim_buf_get_lines(bufnr, last_line, last_line + 1, false)[1] or ""
+    local inserted_text = vim.split(text, '\n', {})
+    inserted_text[1] = current_content .. inserted_text[1]
+    vim.api.nvim_buf_set_lines(bufnr, last_line, last_line + 1, false, inserted_text)
 end
 
 -- Helper function to set up buffer/window options
@@ -121,14 +132,6 @@ local function handle_openai_non_streaming_response(_, data)
         show_in_response_buf(vim.split(result.choices[1].message.content, '\n'))
     end
 end
-
-local function append_to_last_line(bufnr, text)
-    local last_line = vim.api.nvim_buf_line_count(bufnr) - 1  -- lines are 0-indexed
-    local current_content = vim.api.nvim_buf_get_lines(bufnr, last_line, last_line + 1, false)[1] or ""
-    local inserted_text = vim.split(text, '\n', {})
-    inserted_text[1] = current_content .. inserted_text[1]
-    vim.api.nvim_buf_set_lines(bufnr, last_line, last_line + 1, false, inserted_text)
-  end
 
 
 local function handle_openai_streaming_response(_, data)
