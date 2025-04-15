@@ -42,6 +42,9 @@ function Tools.append_to_last_line(bufnr, text)
     vim.api.nvim_buf_set_lines(bufnr, last_line, last_line + 1, false, inserted_text)
 end
 
+-- Shows modal window with choices.
+-- text - window caption explainig question
+-- map - key-action mapping like { y = on_yes, n = on_no}
 function Tools.show_choose_window(text, map)
     -- Create a buffer for the modal dialog
     local content = vim.split(text, '\n')
