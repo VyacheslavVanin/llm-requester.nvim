@@ -44,40 +44,12 @@ end
 -- Append string to last string if buffer bufnr
 local append_to_last_line = utils.append_to_last_line
 
--- Helper function to set up buffer/window options
-local function setup_buffer(win, buf, filetype, modifiable)
-    api.nvim_win_set_option(win, 'number', true)
-    api.nvim_win_set_option(win, 'relativenumber', false)
-    api.nvim_buf_set_option(buf, 'filetype', filetype)
-    api.nvim_buf_set_option(buf, 'modifiable', modifiable)
-end
-
 -- Helper function to create windows
 local function create_split()
-    local total_width = vim.o.columns
-    local total_height = vim.o.lines - 1
-
-    -- Create vertical split for prompt window
-    api.nvim_command('vsplit')
-    prompt_win = api.nvim_get_current_win()
-    prompt_buf = api.nvim_create_buf(false, true)
-    api.nvim_win_set_buf(prompt_win, prompt_buf)
-    setup_buffer(prompt_win, prompt_buf, 'markdown', true)
-
-    -- Create horizontal split for response window
-    api.nvim_command('split')
-    response_win = api.nvim_get_current_win()
-    response_buf = api.nvim_create_buf(false, true)
-    api.nvim_win_set_buf(response_win, response_buf)
-    setup_buffer(response_win, response_buf, 'markdown', false)
-
-    -- Set dimensions based on ratios
-    local prompt_width = math.floor(total_width * config.split_ratio)
-    local prompt_height = math.floor(total_height * config.prompt_split_ratio)
-    
-    api.nvim_win_set_width(prompt_win, prompt_width)
-    api.nvim_win_set_height(prompt_win, prompt_height)
-    api.nvim_win_set_height(response_win, total_height - prompt_height)
+    prompt_win, prompt_buf,
+    response_win, response_buf =
+                    utils.create_chat_split(config.split_ratio,
+                                            config.prompt_split_ratio)
 
     -- Set keymaps
     local close_func = function() 
