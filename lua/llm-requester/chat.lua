@@ -28,20 +28,21 @@ local prompt_win, response_win
 
 local json_reconstruct = require("llm-requester.json_reconstruct")
 local tools = require("llm-requester.tools")
+local utils = require("llm-requester.utils")
 local messages = {}
 
 -- Show content in current buffer exclusivly
 local function show_in_response_buf(content)
-    tools.show_in_buf(response_buf, content)
+    utils.show_in_buf(response_buf, content)
 end
 
 -- Append lines to current buffer
 local function append_to_response_buf(content)
-    tools.append_to_buf(response_buf, content)
+    utils.append_to_buf(response_buf, content)
 end
 
 -- Append string to last string if buffer bufnr
-local append_to_last_line = tools.append_to_last_line
+local append_to_last_line = utils.append_to_last_line
 
 -- Helper function to set up buffer/window options
 local function setup_buffer(win, buf, filetype, modifiable)
@@ -224,7 +225,7 @@ end
 
 -- Generic request handler
 local function handle_request(stream)
-    local code = tools.get_text(prompt_buf)
+    local code = utils.get_text(prompt_buf)
     if code == "/clear" then
         Chat.clear_chat()
         return
