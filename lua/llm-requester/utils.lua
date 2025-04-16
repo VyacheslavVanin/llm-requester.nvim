@@ -129,7 +129,17 @@ function Utils.create_chat_split(hsplit_ratio, vsplit_ratio)
     api.nvim_win_set_width(prompt_win, prompt_width)
     api.nvim_win_set_height(prompt_win, prompt_height)
     api.nvim_win_set_height(response_win, total_height - prompt_height)
+    api.nvim_set_current_win(prompt_win)
+    vim.cmd('startinsert')
     return prompt_win, prompt_buf, response_win, response_buf
+end
+
+function Utils.scoll_window_end(win_id)
+    local orig_win = api.nvim_get_current_win()
+    api.nvim_set_current_win(win_id)
+    vim.cmd('normal! G')
+
+    api.nvim_set_current_win(orig_win)
 end
 
 return Utils

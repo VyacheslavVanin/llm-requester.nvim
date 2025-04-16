@@ -14,7 +14,7 @@ Tools.default_config = {
     close_keys = '<leader>q',
     history_keys = '<leader>h',
     clear_keys = '<leader>cc',
-    --stream = false,
+    stream = false,  -- ignored yet...
 }
 
 local config = vim.deepcopy(Tools.default_config)
@@ -59,6 +59,7 @@ end
 
 function Tools.send_request()
     local text = utils.get_text(prompt_buf)
+    utils.append_to_buf(response_buf, {'', 'Me:', text})
     Tools.make_user_request(text)
 end
 
@@ -79,7 +80,9 @@ function Tools.make_user_request(message)
         local response = table.concat(data, '')
         local success, decoded = pcall(vim.json.decode, response)
         if success then
-            utils.show_in_buf(response_buf, vim.split(decoded.message, '\n'))
+            utils.append_to_buf(response_buf, {'', 'Agent:'})
+            utils.append_to_buf(response_buf, vim.split(decoded.message, '\n'))
+            utils.scoll_window_end(response_win)
             if decoded.requires_approval then
                 Tools.process_required_approval(decoded)
             end
@@ -128,7 +131,9 @@ function Tools.send_approve(request_id, approve)
         local response = table.concat(data, '')
         local success, decoded = pcall(vim.json.decode, response)
         if success then
-            utils.show_in_buf(response_buf, vim.split(decoded.message, '\n'))
+            utils.append_to_buf(response_buf, {'', 'Agent:'})
+            utils.append_to_buf(response_buf, vim.split(decoded.message, '\n'))
+            utils.scoll_window_end(response_win)
             vim.print(decoded.requires_approval)
             if decoded.requires_approval then
                 Tools.process_required_approval(decoded)
