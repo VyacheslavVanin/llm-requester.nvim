@@ -58,9 +58,13 @@ function Tools.open_agent_window()
 end
 
 function Tools.send_request()
-    local text = utils.get_text(prompt_buf)
-    utils.append_to_buf(response_buf, {'', 'Me:', text})
+    local content = utils.get_content(prompt_buf)
+    local text = table.concat(content, '\n')
+    utils.append_to_buf(response_buf, vim.list_extend({'', 'Me:'}, content))
     Tools.make_user_request(text)
+
+    utils.show_in_buf_mutable(prompt_buf, {})
+    vim.cmd('startinsert')
 end
 
 function Tools.show_history()

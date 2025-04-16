@@ -4,9 +4,14 @@ local api = vim.api
 local fn = vim.fn
 
 
+-- Get whole buffers text as list of strings. buf = 0 for current buffer
+function Utils.get_content(buf)
+    return api.nvim_buf_get_lines(buf, 0, -1, false)
+end
+
 -- Get whole buffers text as string. buf = 0 for current buffer
 function Utils.get_text(buf)
-    return table.concat(api.nvim_buf_get_lines(buf, 0, -1, false), '\n')
+    return table.concat(Utils.get_content(buf), '\n')
 end
 
 -- Show content in current buffer exclusivly
