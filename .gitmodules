@@ -1,0 +1,3 @@
+[submodule "mcp-http-host"]
+	path = mcp-http-host
+	url = https://github.com/VyacheslavVanin/mcp-http-host.git
