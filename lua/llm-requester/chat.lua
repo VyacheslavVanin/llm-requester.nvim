@@ -11,6 +11,9 @@ Chat.default_config = {
     openai_url = 'https://openrouter.ai/api/v1/chat/completions',
     openai_api_key = '', -- Set your OpenAI API key here or via setup()
 
+    temperature = 0.2,
+    context_window_size = 2048,
+
     split_ratio = 0.6,
     prompt_split_ratio = 0.2, -- parameter to control dimensions of prompt and response windows
     prompt = 'Please review, improve, and refactor the following code. Provide your suggestions in markdown format with explanations:\n\n',
@@ -147,8 +150,8 @@ local function handle_openai_request(stream)
         model = config.openai_model,
         messages = messages,
         stream = stream,
-        temperature = 0.5,
-        max_tokens = config.context_size
+        temperature = config.temperature,
+        max_tokens = 16384,
     })
 
     if stream then
@@ -176,8 +179,8 @@ local function handle_ollama_request(stream)
         messages = messages,
         stream = stream,
         options = {
-            temperature = 0.5,
-            num_ctx = config.context_size
+            temperature = config.temperature,
+            num_ctx = config.context_window_size
         }
     })
 

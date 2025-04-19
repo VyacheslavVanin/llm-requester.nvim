@@ -3,9 +3,6 @@ local Tools = {}
 local api = vim.api
 local fn = vim.fn
 
-
-local utils = require("llm-requester.utils")
-
 Tools.default_config = {
     api_type = 'ollama', -- 'ollama' or 'openai'
     ollama_model = 'llama2',
@@ -22,10 +19,12 @@ Tools.default_config = {
     open_prompt_window_key = '<leader>ai',
     request_keys = '<leader>r',
     close_keys = '<leader>q',
-    history_keys = '<leader>h',
+    --history_keys = '<leader>h', -- do not need ny more
     clear_keys = '<leader>cc',
     stream = false,  -- ignored yet...
 }
+
+local utils = require("llm-requester.utils")
 
 local config = vim.deepcopy(Tools.default_config)
 
@@ -86,10 +85,8 @@ function Tools.open_agent_window()
     api.nvim_buf_set_keymap(prompt_buf, 'i', '<M-CR>', '', { callback = Tools.send_request })
     api.nvim_buf_set_keymap(prompt_buf, 'n', config.request_keys, '', { callback = Tools.send_request })
     api.nvim_buf_set_keymap(prompt_buf, 'n', config.close_keys, '', { callback = close_func })
-    api.nvim_buf_set_keymap(prompt_buf, 'n', config.history_keys, '', { callback = Tools.show_history })
     api.nvim_buf_set_keymap(prompt_buf, 'n', config.clear_keys, '', { callback = Tools.clear_chat })
     api.nvim_buf_set_keymap(response_buf, 'n', config.close_keys, '', { callback = close_func })
-    api.nvim_buf_set_keymap(response_buf, 'n', config.history_keys, '', { callback = Tools.show_history })
     api.nvim_buf_set_keymap(response_buf, 'n', config.clear_keys, '', { callback = Tools.clear_chat })
 end
 
@@ -101,9 +98,6 @@ function Tools.send_request()
 
     utils.show_in_buf_mutable(prompt_buf, {})
     vim.cmd('startinsert')
-end
-
-function Tools.show_history()
 end
 
 function Tools.clear_chat()
