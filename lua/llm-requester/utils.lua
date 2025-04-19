@@ -54,7 +54,9 @@ function Utils.show_choose_window(text, map)
     -- Create a buffer for the modal dialog
     local content = vim.split(text, '\n')
     local bufnr = vim.api.nvim_create_buf(false, true)
-    local width = 40
+    local win_width = vim.o.columns
+    local win_height = vim.o.lines
+    local width = math.floor(win_width * 0.9)
     local height = #content
 
     -- Create a floating window with the modal dialog content
@@ -63,8 +65,11 @@ function Utils.show_choose_window(text, map)
         height = height,
         border = 'single',
         relative = 'editor',
-        row = (vim.o.lines - height) / 2,
-        col = (vim.o.columns - width) / 2
+        row = vim.fn.min({
+            math.floor((win_height - height) / 2),
+            math.floor(win_height / 10)
+        }),
+        col = (win_width - width) / 2
     })
     api.nvim_win_set_option(float_win, 'number', false)
     api.nvim_win_set_option(float_win, 'relativenumber', false)

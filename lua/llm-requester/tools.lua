@@ -7,7 +7,7 @@ local fn = vim.fn
 local utils = require("llm-requester.utils")
 
 Tools.default_config = {
-    split_ratio = 0.6,
+    split_ratio = 0.5,
     prompt_split_ratio = 0.2, -- parameter to control dimensions of prompt and response windows
     open_prompt_window_key = '<leader>ai',
     request_keys = '<leader>r',
