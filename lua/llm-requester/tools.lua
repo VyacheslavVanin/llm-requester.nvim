@@ -26,8 +26,34 @@ end
 
 
 function Tools.setup(config)
-vim.keymap.set('n', '<leader>t', Tools.open_agent_window, { desc = 'Test action' })
-Tools.send_start_session()
+    -- setup mcp http host --
+    local install_script = vim.api.nvim_get_runtime_file('mcp-http-host/install.sh', true)
+    if #install_script ~= 0 then
+        fn.jobstart({'bash', install_script[1]}, {
+            on_stdout = function(_, data) end,
+            on_exit = nil,
+            stdout_buffered = true,
+        })
+    end
+
+    -- start mcp http host --
+
+    local mcp_http_host_dir = vim.api.nvim_get_runtime_file('mcp-http-host', false)[1]
+    fn.jobstart({
+            'uv', 'run', 'main.py',
+            '--current-directory', vim.fn.getcwd(),
+        },
+        {
+            on_stdout = function(_, data)
+                -- TODO: here we can save output from server to some log
+            end,
+            on_exit = nil,
+            stdout_buffered = true,
+            cwd = mcp_http_host_dir,
+    })
+
+    vim.keymap.set('n', '<leader>t', Tools.open_agent_window, { desc = 'Test action' })
+    Tools.send_start_session()
 end
 
 
@@ -138,7 +164,6 @@ function Tools.send_approve(request_id, approve)
             utils.append_to_buf(response_buf, {'', 'Agent:'})
             utils.append_to_buf(response_buf, vim.split(decoded.message, '\n'))
             utils.scoll_window_end(response_win)
-            vim.print(decoded.requires_approval)
             if decoded.requires_approval then
                 Tools.process_required_approval(decoded)
             end
