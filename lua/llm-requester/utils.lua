@@ -89,6 +89,7 @@ function Utils.show_choose_window(text, map)
 
     -- Focus the floating window
     vim.api.nvim_set_current_win(float_win)
+    vim.cmd('stopinsert')
 end
 
 
