@@ -7,6 +7,16 @@ local fn = vim.fn
 local utils = require("llm-requester.utils")
 
 Tools.default_config = {
+    api_type = 'ollama', -- 'ollama' or 'openai'
+    ollama_model = 'llama2',
+    ollama_url = 'http://localhost:11434',
+    openai_model = 'llama2',
+    openai_url = 'https://openrouter.ai/api/v1',
+    openai_api_key = '', -- Set your OpenAI API key here or via setup()
+
+    temperature = 0.2,
+    context_window_size = 2048,
+
     split_ratio = 0.5,
     prompt_split_ratio = 0.2, -- parameter to control dimensions of prompt and response windows
     open_prompt_window_key = '<leader>ai',
@@ -185,6 +195,12 @@ end
 function Tools.send_start_session()
     local json_data = vim.json.encode({
         current_directory = vim.fn.getcwd(),
+        llm_provider = config.api_type,
+        model = (config.api_type == 'openai') and config.openai_model or config.ollama_model,
+        provider_base_url = (config.api_type == 'openai') and config.openai_url or config.ollama_url,
+        api_key = config.openai_api_key,
+        temperature = config.temperature,
+        context_window_size = config.context_window_size,
     })
     local handle = function(_, data)
     end
