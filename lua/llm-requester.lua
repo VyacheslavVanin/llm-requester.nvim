@@ -64,6 +64,26 @@ function M.setup(user_config)
         chat_config.stream = config.stream or d.stream
     end
     Chat.setup(vim.tbl_extend('force', config.chat, chat_config or {}))
+
+    -- setup mcp http host --
+    local install_script = vim.api.nvim_get_runtime_file('mcp-http-host/install.sh', true)
+    if #install_script ~= 0 then
+        fn.jobstart({'bash', install_script[1]}, {
+            on_stdout = function(_, data) end,
+            on_exit = nil,
+            stdout_buffered = true,
+        })
+    end
+    local mcp_http_host_dir = vim.api.nvim_get_runtime_file('mcp-http-host', false)[1]
+    fn.jobstart({'uv', 'run', 'main.py'}, {
+        on_stdout = function(_, data)
+            -- TODO: here we can save output from server to some log
+        end,
+        on_exit = nil,
+        stdout_buffered = true,
+        cwd = mcp_http_host_dir,
+    })
+
 end
 
 return M
