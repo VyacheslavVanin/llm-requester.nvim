@@ -30,7 +30,6 @@ local prompt_buf, response_buf
 local prompt_win, response_win
 
 local json_reconstruct = require("llm-requester.json_reconstruct")
-local tools = require("llm-requester.tools")
 local utils = require("llm-requester.utils")
 local messages = {}
 
@@ -226,8 +225,6 @@ function Chat.setup(main_config)
     vim.api.nvim_create_user_command('LLMRequester', Chat.open_code_window, { range = true })
     vim.api.nvim_create_user_command('LLMRequesterSetOllamaModel', Chat.set_ollama_model, { range = true, nargs = 1 })
     vim.api.nvim_create_user_command('LLMRequesterSetOpenaiModel', Chat.set_openai_model, { range = true, nargs = 1 })
-
-    tools.setup()
 end
 
 function Chat.send_request()

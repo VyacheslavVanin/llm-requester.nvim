@@ -2,7 +2,7 @@ local api = vim.api
 local fn = vim.fn
 
 local Completion = require('llm-requester.completion')
-local Chat = require('llm-requester.chat') -- Require the chat module
+local Tools = require("llm-requester.tools")
 
 local M = {}
 
@@ -51,7 +51,7 @@ function M.setup(user_config)
     if not chat_config and not user_config.completion and next(user_config) ~= nil then
         vim.notify('Options for chat moved to "chat" section of config. See README')
         -- For backward compatibility
-        local d = Chat.default_config
+        local d = Tools.default_config
         chat_config = vim.deepcopy(d)
         chat_config.ollama_url = config.url or d.ollama_url
         chat_config.ollama_model = config.model or d.ollama_mode
@@ -63,8 +63,7 @@ function M.setup(user_config)
         chat_config.close_keys = config.close_keys or d.close_keys
         chat_config.stream = config.stream or d.stream
     end
-    Chat.setup(vim.tbl_extend('force', config.chat, chat_config or {}))
-
+    Tools.setup(vim.tbl_extend('force', config.chat, chat_config or {}))
 end
 
 return M

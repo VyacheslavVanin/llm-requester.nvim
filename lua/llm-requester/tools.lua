@@ -19,7 +19,6 @@ Tools.default_config = {
     open_prompt_window_key = '<leader>ai',
     request_keys = '<leader>r',
     close_keys = '<leader>q',
-    --history_keys = '<leader>h', -- do not need ny more
     clear_keys = '<leader>cc',
     stream = false,  -- ignored yet...
 }
@@ -34,7 +33,9 @@ local function test_action()
 end
 
 
-function Tools.setup(config)
+function Tools.setup(main_config)
+    config = vim.tbl_extend('force', config, main_config or {})
+
     -- setup mcp http host --
     local install_script = vim.api.nvim_get_runtime_file('mcp-http-host/install.sh', true)
     if #install_script ~= 0 then
@@ -61,10 +62,21 @@ function Tools.setup(config)
             cwd = mcp_http_host_dir,
     })
 
-    vim.keymap.set('n', '<leader>t', Tools.open_agent_window, { desc = 'Test action' })
+    vim.keymap.set('n', config.open_prompt_window_key, Tools.open_agent_window, { desc = 'Test action' })
+    vim.keymap.set('v', config.open_prompt_window_key, Tools.open_agent_window, { desc = 'Test action' })
+    vim.api.nvim_create_user_command('LLMRequester', Tools.open_agent_window, { range = true })
+    vim.api.nvim_create_user_command('LLMRequesterSetOllamaModel', Tools.set_ollama_model, { range = true, nargs = 1 })
+    vim.api.nvim_create_user_command('LLMRequesterSetOpenaiModel', Tools.set_openai_model, { range = true, nargs = 1 })
     Tools.send_start_session()
 end
 
+function Tools.set_ollama_model(attr)
+    config.ollama_model = attr.fargs[1]
+end
+
+function Tools.set_openai_model(attr)
+    config.openai_model = attr.fargs[1]
+end
 
 local prompt_win, prompt_buf, response_win, response_buf
 
