@@ -24,6 +24,7 @@ Tools.default_config = {
 }
 
 local utils = require("llm-requester.utils")
+local json_reconstruct = require("llm-requester.json_reconstruct")
 
 local config = vim.deepcopy(Tools.default_config)
 
@@ -47,11 +48,11 @@ function Tools.setup(main_config)
     end
 
     -- start mcp http host --
-
     local mcp_http_host_dir = vim.api.nvim_get_runtime_file('mcp-http-host', false)[1]
     fn.jobstart({
             'uv', 'run', 'main.py',
             '--current-directory', vim.fn.getcwd(),
+            '--stream', tostring(config.stream),
         },
         {
             on_stdout = function(_, data)
@@ -109,7 +110,8 @@ function Tools.send_request()
     Tools.make_user_request(text)
 
     utils.show_in_buf_mutable(prompt_buf, {})
-    vim.cmd('startinsert')
+    -- TODO: Uncomment this !!!!!111
+    --vim.cmd('startinsert')
 end
 
 function Tools.clear_chat()
@@ -117,33 +119,53 @@ function Tools.clear_chat()
     utils.show_in_buf(response_buf, {})
 end
 
+local function handle(_, data)
+    local response = table.concat(data, '')
+    local success, decoded = pcall(vim.json.decode, response)
+    if success then
+        utils.append_to_buf(response_buf, {'', 'Agent:'})
+        utils.append_to_buf(response_buf, vim.split(decoded.message, '\n'))
+        utils.scoll_window_end(response_win)
+        if decoded.requires_approval then
+            Tools.process_required_approval(decoded)
+        end
+    end
+end
+
+local function handle_on_exit(_, exit_code)
+end
+
+local function handle_streaming_response(_, data)
+    if #data > 0 then
+        for _, line in ipairs(data) do
+            api.nvim_buf_set_option(response_buf, 'modifiable', true)
+            json_reconstruct.process_part(line, function(complete_json)
+                local success, decoded = pcall(vim.json.decode, complete_json)
+                if success and decoded.message then
+                    utils.append_to_last_line(response_buf, decoded.message)
+                    if decoded.request_id then
+                        Tools.process_required_approval(decoded)
+                    end
+                end
+            end)
+            api.nvim_buf_set_option(response_buf, 'modifiable', false)
+        end
+    end
+end
+
 function Tools.make_user_request(message)
     local json_data = vim.json.encode({
         input = message,
     })
-
-    local handle = function(_, data)
-        local response = table.concat(data, '')
-        local success, decoded = pcall(vim.json.decode, response)
-        if success then
-            utils.append_to_buf(response_buf, {'', 'Agent:'})
-            utils.append_to_buf(response_buf, vim.split(decoded.message, '\n'))
-            utils.scoll_window_end(response_win)
-            if decoded.requires_approval then
-                Tools.process_required_approval(decoded)
-            end
-        end
-    end
-    local handle_on_exit = function(_, exit_code)
-    end
+    utils.append_to_buf(response_buf, {'', 'Agent:', ''})
     fn.jobstart({'curl', '-s',
                  '-X', 'POST',
                  '-H', 'Content-Type: application/json',
                  'http://localhost:8000/user_request',
                  '-d', json_data}, {
-        on_stdout = handle,
+        on_stdout = (config.stream and handle_streaming_response) or handle,
         on_exit = handle_on_exit,
-        stdout_buffered = true,
+        stdout_buffered = not config.stream,
     })
 end
 
@@ -173,26 +195,12 @@ function Tools.send_approve(request_id, approve)
         request_id = request_id,
         approve = approve,
     })
-    local handle = function(_, data)
-        local response = table.concat(data, '')
-        local success, decoded = pcall(vim.json.decode, response)
-        if success then
-            utils.append_to_buf(response_buf, {'', 'Agent:'})
-            utils.append_to_buf(response_buf, vim.split(decoded.message, '\n'))
-            utils.scoll_window_end(response_win)
-            if decoded.requires_approval then
-                Tools.process_required_approval(decoded)
-            end
-        end
-    end
-    local handle_on_exit = function(_, exit_code)
-    end
     fn.jobstart({'curl', '-s',
                  '-X', 'POST',
                  '-H', 'Content-Type: application/json',
                  'http://localhost:8000/approve',
                  '-d', json_data}, {
-        on_stdout = handle,
+        on_stdout = (config.stream and handle_streaming_response) or handle,
         on_exit = handle_on_exit,
         stdout_buffered = true,
     })
