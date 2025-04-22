@@ -48,6 +48,7 @@ function Tools.setup(main_config)
             'uv', 'run', 'main.py',
             '--current-directory', vim.fn.getcwd(),
             '--stream', tostring(config.stream),
+            '--model', config.api_type == "ollama" and config.ollama_model or config.openai_model
         },
         {
             on_stdout = function(_, data)
