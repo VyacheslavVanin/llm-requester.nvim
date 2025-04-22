@@ -20,19 +20,14 @@ Tools.default_config = {
     request_keys = '<leader>r',
     close_keys = '<leader>q',
     clear_keys = '<leader>cc',
-    stream = false,  -- ignored yet...
+    stream = true,
 }
 
 local utils = require("llm-requester.utils")
 local json_reconstruct = require("llm-requester.json_reconstruct")
 
 local config = vim.deepcopy(Tools.default_config)
-
-local function test_action()
-    local text = utils.get_text(0)
-    Tools.make_user_request(text)
-end
-
+local approve_window_shown = false
 
 function Tools.setup(main_config)
     config = vim.tbl_extend('force', config, main_config or {})
@@ -110,8 +105,6 @@ function Tools.send_request()
     Tools.make_user_request(text)
 
     utils.show_in_buf_mutable(prompt_buf, {})
-    -- TODO: Uncomment this !!!!!111
-    --vim.cmd('startinsert')
 end
 
 function Tools.clear_chat()
@@ -125,7 +118,7 @@ local function handle(_, data)
     if success then
         utils.append_to_buf(response_buf, {'', 'Agent:'})
         utils.append_to_buf(response_buf, vim.split(decoded.message, '\n'))
-        utils.scoll_window_end(response_win)
+        utils.scroll_window_end(response_win)
         if decoded.requires_approval then
             Tools.process_required_approval(decoded)
         end
@@ -133,6 +126,10 @@ local function handle(_, data)
 end
 
 local function handle_on_exit(_, exit_code)
+    if not approve_window_shown then
+        api.nvim_set_current_win(prompt_win)
+        vim.cmd('startinsert')
+    end
 end
 
 local function handle_streaming_response(_, data)
@@ -146,6 +143,7 @@ local function handle_streaming_response(_, data)
                     if decoded.request_id then
                         Tools.process_required_approval(decoded)
                     end
+                    utils.scroll_window_end(response_win)
                 end
             end)
             api.nvim_buf_set_option(response_buf, 'modifiable', false)
@@ -177,10 +175,13 @@ function Tools.process_required_approval(decoded)
                           "approve (y/n)?"
     local function on_approve()
         Tools.send_approve(request_id, true)
+        approve_window_shown = false
     end
     local function on_deny()
         Tools.send_approve(request_id, false)
+        approve_window_shown = false
     end
+    approve_window_shown = true
     utils.show_choose_window(
         popup_content,
         {
@@ -202,7 +203,7 @@ function Tools.send_approve(request_id, approve)
                  '-d', json_data}, {
         on_stdout = (config.stream and handle_streaming_response) or handle,
         on_exit = handle_on_exit,
-        stdout_buffered = true,
+        stdout_buffered = not config.stream,
     })
 end
 

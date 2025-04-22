@@ -145,7 +145,7 @@ function Utils.create_chat_split(hsplit_ratio, vsplit_ratio)
     return prompt_win, prompt_buf, response_win, response_buf
 end
 
-function Utils.scoll_window_end(win_id)
+function Utils.scroll_window_end(win_id)
     local orig_win = api.nvim_get_current_win()
     api.nvim_set_current_win(win_id)
     vim.cmd('normal! G')
