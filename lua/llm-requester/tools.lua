@@ -47,7 +47,7 @@ function Tools.setup(main_config)
     fn.jobstart({
             'uv', 'run', 'main.py',
             '--current-directory', vim.fn.getcwd(),
-            '--stream', tostring(config.stream),
+            '--stream', --tostring(config.stream),
             '--model', config.api_type == "ollama" and config.ollama_model or config.openai_model
         },
         {
@@ -127,25 +127,18 @@ local function handle(_, data)
 end
 
 local function handle_on_exit(_, exit_code)
-    if not approve_window_shown then
-        api.nvim_set_current_win(prompt_win)
-        vim.cmd('startinsert')
-    end
 end
 
 local function handle_streaming_response(_, data)
     if #data > 0 then
         for _, line in ipairs(data) do
             api.nvim_buf_set_option(response_buf, 'modifiable', true)
-            json_reconstruct.process_part(line, function(complete_json)
-                local success, decoded = pcall(vim.json.decode, complete_json)
-                if success and decoded.message then
-                    utils.append_to_last_line(response_buf, decoded.message)
-                    if decoded.request_id then
-                        Tools.process_required_approval(decoded)
-                    end
-                    utils.scroll_window_end(response_win)
+            json_reconstruct.process_part(line, function(decoded)
+                utils.append_to_last_line(response_buf, decoded.message)
+                if decoded.request_id and decoded.request_id ~= vim.NIL then
+                    Tools.process_required_approval(decoded)
                 end
+                utils.scroll_window_end(response_win)
             end)
             api.nvim_buf_set_option(response_buf, 'modifiable', false)
         end

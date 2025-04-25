@@ -146,11 +146,9 @@ function Utils.create_chat_split(hsplit_ratio, vsplit_ratio)
 end
 
 function Utils.scroll_window_end(win_id)
-    local orig_win = api.nvim_get_current_win()
-    api.nvim_set_current_win(win_id)
-    vim.cmd('normal! G')
-
-    api.nvim_set_current_win(orig_win)
+    local buf = api.nvim_win_get_buf(win_id)
+    local lines = api.nvim_buf_line_count(buf)
+    api.nvim_win_set_cursor(win_id, {lines, 0})
 end
 
 return Utils
