@@ -42,21 +42,36 @@ function Tools.setup(main_config)
         })
     end
 
+    local error = ''
     -- start mcp http host --
     local mcp_http_host_dir = vim.api.nvim_get_runtime_file('mcp-http-host', false)[1]
     fn.jobstart({
             'uv', 'run', 'main.py',
             '--current-directory', vim.fn.getcwd(),
             '--stream', --tostring(config.stream),
-            '--model', config.api_type == "ollama" and config.ollama_model or config.openai_model
+            '--model', config.api_type == "ollama" and config.ollama_model or config.openai_model,
+            '--ollama-base-url', config.ollama_url,
+            '--openai-base-url', config.openai_url,
+            '--provider', config.api_type,
+            '--temperature', config.temperature,
+            '--context-window-size', config.context_window_size,
         },
         {
             on_stdout = function(_, data)
                 -- TODO: here we can save output from server to some log
             end,
-            on_exit = nil,
+            on_stderr = function(_, data)
+                -- TODO: here we can save output from server to some log
+                error = error .. table.concat(data, '\n')
+            end,
+            on_exit = function(_, exit_code)
+                vim.print(error)
+            end,
             stdout_buffered = true,
             cwd = mcp_http_host_dir,
+            env = {
+                LLM_API_KEY = (config.openai_api_key ~= '' and config.openai_api_key) or 'None',
+            }
     })
 
     vim.keymap.set('n', config.open_prompt_window_key, Tools.open_agent_window, { desc = 'Test action' })
