@@ -46,7 +46,6 @@ function Tools.setup(main_config)
         })
     end
 
-    local error = ''
     -- start mcp http host --
     local mcp_http_host_dir = vim.api.nvim_get_runtime_file('mcp-http-host', false)[1]
     fn.jobstart({
@@ -66,10 +65,8 @@ function Tools.setup(main_config)
             end,
             on_stderr = function(_, data)
                 -- TODO: here we can save output from server to some log
-                error = error .. table.concat(data, '\n')
             end,
             on_exit = function(_, exit_code)
-                vim.print(error)
             end,
             stdout_buffered = true,
             cwd = mcp_http_host_dir,
@@ -211,8 +208,10 @@ function Tools.process_required_approval(decoded)
     end
 
     if always_approve_set[tool.name] then
-        on_approve()
-        return
+        if tool.arguments.path == nil or utils.is_subdirectory(tool.arguments.path, vim.fn.getcwd()) then
+            on_approve()
+            return
+        end
     end
 
     approve_window_shown = true

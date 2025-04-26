@@ -151,4 +151,28 @@ function Utils.scroll_window_end(win_id)
     api.nvim_win_set_cursor(win_id, {lines, 0})
 end
 
+function Utils.is_subdirectory(path, parent)
+    -- Check if path contains '..'
+    if string.find(path, '%.%.') then
+        return false
+    end
+
+    -- Allow tools for subdirectories
+    if string.sub(path, 1, 1) ~= '/' then
+        return true
+    end
+
+    -- Ensure both paths start with '/'
+    if not (string.sub(path, 1, 1) == '/' and string.sub(parent, 1, 1) == '/') then
+        return false
+    end
+
+    -- Check if path starts with parent
+    if string.sub(path, 1, #parent) == parent then
+        return true
+    else
+        return false
+    end
+end
+
 return Utils
