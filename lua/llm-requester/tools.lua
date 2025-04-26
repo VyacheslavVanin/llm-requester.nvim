@@ -28,6 +28,10 @@ local json_reconstruct = require("llm-requester.json_reconstruct")
 
 local config = vim.deepcopy(Tools.default_config)
 local approve_window_shown = false
+local always_approve_set = {
+    list_files = true,
+    read_file = true,
+}
 
 function Tools.setup(main_config)
     config = vim.tbl_extend('force', config, main_config or {})
@@ -176,26 +180,48 @@ function Tools.make_user_request(message)
     })
 end
 
+local function format_tool(tool)
+    local ret = ""
+    ret = tool.name .. "("
+    for k, v in pairs(tool.arguments) do
+        ret = ret .. "\"" .. k .. "\": \"" .. v .. "\", "
+    end
+    ret = ret .. ")"
+    return ret
+end
+
 function Tools.process_required_approval(decoded)
     local message = decoded.message
     local request_id = decoded.request_id
     local tool = decoded.tool
-    local popup_content = "LLM wants to use tool:\n - " .. tool .. "\n" ..
-                          "approve (y/n)?"
+    local popup_content = "LLM wants to use tool:\n - " .. format_tool(tool) .. "\n" ..
+                          "approve ((y)es/(n)o/(A)lways approve)?"
     local function on_approve()
         Tools.send_approve(request_id, true)
+        approve_window_shown = false
+    end
+    local function on_always_approve()
+        Tools.send_approve(request_id, true)
+        always_approve_set[tool.name] = true
         approve_window_shown = false
     end
     local function on_deny()
         Tools.send_approve(request_id, false)
         approve_window_shown = false
     end
+
+    if always_approve_set[tool.name] then
+        on_approve()
+        return
+    end
+
     approve_window_shown = true
     utils.show_choose_window(
         popup_content,
         {
             y = on_approve,
             n = on_deny,
+            A = on_always_approve,
         }
     )
 end
