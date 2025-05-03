@@ -31,6 +31,9 @@ local approve_window_shown = false
 local always_approve_set = {
     list_files = true,
     read_file = true,
+    create_directory = true,
+    edit_files = true,
+    write_whole_file = true,
 }
 
 function Tools.setup(main_config)
