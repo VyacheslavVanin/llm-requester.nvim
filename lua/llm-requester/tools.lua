@@ -21,6 +21,7 @@ Tools.default_config = {
     close_keys = '<leader>q',
     clear_keys = '<leader>cc',
     stream = true,
+    max_rps = 100,
 }
 
 local utils = require("llm-requester.utils")
@@ -49,6 +50,9 @@ function Tools.setup(main_config)
         })
     end
 
+    local error = ""
+    local stdout = ""
+
     -- start mcp http host --
     local mcp_http_host_dir = vim.api.nvim_get_runtime_file('mcp-http-host', false)[1]
     fn.jobstart({
@@ -61,15 +65,20 @@ function Tools.setup(main_config)
             '--provider', config.api_type,
             '--temperature', config.temperature,
             '--context-window-size', config.context_window_size,
+            '--max-rps', config.max_rps,
         },
         {
             on_stdout = function(_, data)
                 -- TODO: here we can save output from server to some log
+                stdout = stdout .. table.concat(data, '\n')
             end,
             on_stderr = function(_, data)
                 -- TODO: here we can save output from server to some log
+                error = error .. table.concat(data, '\n')
             end,
             on_exit = function(_, exit_code)
+                vim.notify(error)
+                vim.notify(stdout)
             end,
             stdout_buffered = true,
             cwd = mcp_http_host_dir,
