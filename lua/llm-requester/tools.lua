@@ -12,6 +12,8 @@ Tools.default_config = {
     openai_api_key = '', -- Set your OpenAI API key here or via setup()
 
     temperature = 0.2,
+    top_k = 20,
+    top_p = nil,
     context_window_size = 2048,
 
     split_ratio = 0.5,
@@ -55,7 +57,8 @@ function Tools.setup(main_config)
 
     -- start mcp http host --
     local mcp_http_host_dir = vim.api.nvim_get_runtime_file('mcp-http-host', false)[1]
-    fn.jobstart({
+
+    local command = {
             'uv', 'run', 'main.py',
             '--current-directory', vim.fn.getcwd(),
             '--stream', --tostring(config.stream),
@@ -63,10 +66,22 @@ function Tools.setup(main_config)
             '--ollama-base-url', config.ollama_url,
             '--openai-base-url', config.openai_url,
             '--provider', config.api_type,
-            '--temperature', config.temperature,
             '--context-window-size', config.context_window_size,
             '--max-rps', config.max_rps,
-        },
+        }
+    if config.top_p ~= nil then
+        table.insert(command, '--top_p')
+        table.insert(command, config.top_p)
+    end
+    if config.top_k ~= nil then
+        table.insert(command, '--top_k')
+        table.insert(command, config.top_k)
+    end
+    if config.temperature ~= nil then
+        table.insert(command, '--temperature')
+        table.insert(command, config.temperature)
+    end
+    fn.jobstart(command,
         {
             on_stdout = function(_, data)
                 -- TODO: here we can save output from server to some log
