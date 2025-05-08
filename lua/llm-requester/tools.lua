@@ -173,9 +173,39 @@ local function handle_streaming_response(_, data)
     end
 end
 
+local function get_first_filename_from_buffers()
+    -- Get the current tab page number
+    local tabnr = vim.api.nvim_get_current_tabpage()
+
+    -- Get the list of buffers in the current tab page
+    local windows = vim.api.nvim_tabpage_list_wins(tabnr)
+
+    -- Iterate through the buffers and find the first one with a valid filename
+    for _, win_id in ipairs(windows) do
+        local bufnr = vim.api.nvim_win_get_buf(win_id)
+        local filename = vim.api.nvim_buf_get_name(bufnr)
+        if filename ~= "" and filename ~= "[No Name]" then
+            return filename
+        end
+    end
+
+    -- Return nil if no buffer with a valid filename is found
+    return nil
+end
+
+local function make_editor_context()
+    opened_file = get_first_filename_from_buffers()
+    if opened_file == nil then
+        return ""
+    end
+
+    return "- user look at existing " .. opened_file .. " file"
+end
+
 function Tools.make_user_request(message)
     local json_data = vim.json.encode({
         input = message,
+        context = make_editor_context(),
     })
     utils.append_to_buf(response_buf, {'', 'Agent:', ''})
     fn.jobstart({'curl', '-s',
