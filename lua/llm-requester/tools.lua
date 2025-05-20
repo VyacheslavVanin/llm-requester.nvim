@@ -18,7 +18,8 @@ Tools.default_config = {
 
     split_ratio = 0.5,
     prompt_split_ratio = 0.2, -- parameter to control dimensions of prompt and response windows
-    open_prompt_window_key = '<leader>ai',
+    open_prompt_window_key = '<leader>ac',
+    open_agent_window_key = '<leader>ai',
     request_keys = '<leader>r',
     close_keys = '<leader>q',
     clear_keys = '<leader>cc',
@@ -40,6 +41,9 @@ local always_approve_set = {
 }
 
 local chat_session_id = nil
+local agent_session_id = nil
+local session_id = nil
+local current_chat_type = nil
 
 function Tools.setup(main_config)
     config = vim.tbl_extend('force', config, main_config or {})
@@ -104,9 +108,11 @@ function Tools.setup(main_config)
             }
     })
 
-    vim.keymap.set('n', config.open_prompt_window_key, Tools.open_agent_window, { desc = 'Test action' })
-    vim.keymap.set('v', config.open_prompt_window_key, Tools.open_agent_window, { desc = 'Test action' })
-    vim.api.nvim_create_user_command('LLMRequester', Tools.open_agent_window, { range = true })
+    vim.keymap.set('n', config.open_prompt_window_key, Tools.open_chat_window, { desc = 'Test action' })
+    vim.keymap.set('v', config.open_prompt_window_key, Tools.open_chat_window, { desc = 'Test action' })
+    vim.keymap.set('n', config.open_agent_window_key, Tools.open_agent_window, { desc = 'Test action' })
+    vim.keymap.set('v', config.open_agent_window_key, Tools.open_agent_window, { desc = 'Test action' })
+    vim.api.nvim_create_user_command('LLMRequester', Tools.open_chat_window, { range = true })
     vim.api.nvim_create_user_command('LLMRequesterSetOllamaModel', Tools.set_ollama_model, { range = true, nargs = 1 })
     vim.api.nvim_create_user_command('LLMRequesterSetOpenaiModel', Tools.set_openai_model, { range = true, nargs = 1 })
 end
@@ -121,15 +127,32 @@ end
 
 local prompt_win, prompt_buf, response_win, response_buf
 
+function Tools.open_chat_window()
+    Tools.open_chat_window_impl('chat')
+end
+
 function Tools.open_agent_window()
+    Tools.open_chat_window_impl('agent')
+end
+
+function Tools.open_chat_window_impl(chat_type)
     if (prompt_win and api.nvim_win_is_valid(prompt_win)) or
        (response_win and api.nvim_win_is_valid(response_win)) then
         return
     end
 
-    if chat_session_id == nil then
-        Tools.send_start_session('chat')
+    if chat_type == 'chat' then
+        if chat_session_id == nil then
+            Tools.send_start_session('chat')
+        end
+        session_id = chat_session_id
+    elseif chat_type == 'agent' then
+        if agent_session_id == nil then
+            Tools.send_start_session('agent')
+        end
+        session_id = agent_session_id
     end
+    current_chat_type = chat_type
 
     prompt_win, prompt_buf, response_win, response_buf =
         utils.create_chat_split(config.split_ratio, config.prompt_split_ratio)
@@ -160,7 +183,7 @@ function Tools.send_request()
 end
 
 function Tools.clear_chat()
-    Tools.send_start_session('chat')
+    Tools.send_start_session(current_chat_type)
     utils.show_in_buf(response_buf, {})
 end
 
@@ -229,7 +252,7 @@ function Tools.make_user_request(message)
     local json_data = vim.json.encode({
         input = message,
         context = make_editor_context(),
-        session_id = chat_session_id,
+        session_id = session_id,
     })
     utils.append_to_buf(response_buf, {'', 'Agent:', ''})
     fn.jobstart({'curl', '-s',
@@ -295,7 +318,7 @@ function Tools.send_approve(request_id, approve)
     local json_data = vim.json.encode({
         request_id = request_id,
         approve = approve,
-        session_id = chat_session_id,
+        session_id = session_id,
     })
     fn.jobstart({'curl', '-s',
                  '-X', 'POST',
@@ -325,7 +348,11 @@ function Tools.send_start_session(chat_type)
         local success, decoded = pcall(vim.json.decode, response)
         if chat_type == 'chat' then
             chat_session_id = decoded.session_id
-        end
+            session_id = chat_session_id
+        elseif chat_type == 'agent' then
+            agent_session_id = decoded.session_id
+            session_id = agent_session_id
+        end 
     end
     local handle_on_exit = function(_, exit_code)
     end
