@@ -39,7 +39,7 @@ local always_approve_set = {
     write_whole_file = true,
 }
 
-local session_id = 'aaa'
+local chat_session_id = nil
 
 function Tools.setup(main_config)
     config = vim.tbl_extend('force', config, main_config or {})
@@ -109,13 +109,6 @@ function Tools.setup(main_config)
     vim.api.nvim_create_user_command('LLMRequester', Tools.open_agent_window, { range = true })
     vim.api.nvim_create_user_command('LLMRequesterSetOllamaModel', Tools.set_ollama_model, { range = true, nargs = 1 })
     vim.api.nvim_create_user_command('LLMRequesterSetOpenaiModel', Tools.set_openai_model, { range = true, nargs = 1 })
-
-    fn.jobstart({'sleep', '1'}, {
-        on_exit = function(_, exit_code)
-            Tools.send_start_session()
-        end
-    })
-
 end
 
 function Tools.set_ollama_model(attr)
@@ -129,8 +122,15 @@ end
 local prompt_win, prompt_buf, response_win, response_buf
 
 function Tools.open_agent_window()
-    local split_ratio = 0.5
-    local prompt_split_ratio = 0.2
+    if (prompt_win and api.nvim_win_is_valid(prompt_win)) or
+       (response_win and api.nvim_win_is_valid(response_win)) then
+        return
+    end
+
+    if chat_session_id == nil then
+        Tools.send_start_session('chat')
+    end
+
     prompt_win, prompt_buf, response_win, response_buf =
         utils.create_chat_split(config.split_ratio, config.prompt_split_ratio)
 
@@ -160,7 +160,7 @@ function Tools.send_request()
 end
 
 function Tools.clear_chat()
-    Tools.send_start_session()
+    Tools.send_start_session('chat')
     utils.show_in_buf(response_buf, {})
 end
 
@@ -229,7 +229,7 @@ function Tools.make_user_request(message)
     local json_data = vim.json.encode({
         input = message,
         context = make_editor_context(),
-        session_id = session_id,
+        session_id = chat_session_id,
     })
     utils.append_to_buf(response_buf, {'', 'Agent:', ''})
     fn.jobstart({'curl', '-s',
@@ -295,7 +295,7 @@ function Tools.send_approve(request_id, approve)
     local json_data = vim.json.encode({
         request_id = request_id,
         approve = approve,
-        session_id = session_id,
+        session_id = chat_session_id,
     })
     fn.jobstart({'curl', '-s',
                  '-X', 'POST',
@@ -308,7 +308,7 @@ function Tools.send_approve(request_id, approve)
     })
 end
 
-function Tools.send_start_session()
+function Tools.send_start_session(chat_type)
     local json_data = vim.json.encode({
         current_directory = vim.fn.getcwd(),
         llm_provider = config.api_type,
@@ -318,11 +318,14 @@ function Tools.send_start_session()
         temperature = config.temperature,
         context_size = config.context_size,
         stream = config.stream,
+        chat_type = chat_type,
     })
     local handle = function(_, data)
         local response = table.concat(data, '')
         local success, decoded = pcall(vim.json.decode, response)
-        session_id = decoded.session_id
+        if chat_type == 'chat' then
+            chat_session_id = decoded.session_id
+        end
     end
     local handle_on_exit = function(_, exit_code)
     end
