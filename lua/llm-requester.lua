@@ -24,7 +24,9 @@ local config = {
         open_prompt_window_key = '<leader>ai',
         request_keys = '<leader>r',
         close_keys = '<leader>q',
+        clear_keys = '<leader>cc', -- reset chat
         stream = false,
+        max_rps = 100,  -- limit llm request rate
     },
     completion = {
         ollama_model = 'llama2',

@@ -12,7 +12,7 @@ Chat.default_config = {
     openai_api_key = '', -- Set your OpenAI API key here or via setup()
 
     temperature = 0.2,
-    context_window_size = 2048,
+    context_size = 2048,
 
     split_ratio = 0.6,
     prompt_split_ratio = 0.2, -- parameter to control dimensions of prompt and response windows
@@ -179,7 +179,7 @@ local function handle_ollama_request(stream)
         stream = stream,
         options = {
             temperature = config.temperature,
-            num_ctx = config.context_window_size
+            num_ctx = config.context_size
         }
     })
 

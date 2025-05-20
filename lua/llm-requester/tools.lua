@@ -14,7 +14,7 @@ Tools.default_config = {
     temperature = 0.2,
     top_k = 20,
     top_p = nil,
-    context_window_size = 2048,
+    context_size = 2048,
 
     split_ratio = 0.5,
     prompt_split_ratio = 0.2, -- parameter to control dimensions of prompt and response windows
@@ -66,7 +66,7 @@ function Tools.setup(main_config)
             '--ollama-base-url', config.ollama_url,
             '--openai-base-url', config.openai_url,
             '--provider', config.api_type,
-            '--context-window-size', config.context_window_size,
+            '--context-size', config.context_size,
             '--max-rps', config.max_rps,
         }
     if config.top_p ~= nil then
@@ -306,7 +306,7 @@ function Tools.send_start_session()
         provider_base_url = (config.api_type == 'openai') and config.openai_url or config.ollama_url,
         api_key = config.openai_api_key,
         temperature = config.temperature,
-        context_window_size = config.context_window_size,
+        context_size = config.context_size,
     })
     local handle = function(_, data)
     end
