@@ -39,6 +39,8 @@ local always_approve_set = {
     write_whole_file = true,
 }
 
+local session_id = 'aaa'
+
 function Tools.setup(main_config)
     config = vim.tbl_extend('force', config, main_config or {})
 
@@ -107,7 +109,13 @@ function Tools.setup(main_config)
     vim.api.nvim_create_user_command('LLMRequester', Tools.open_agent_window, { range = true })
     vim.api.nvim_create_user_command('LLMRequesterSetOllamaModel', Tools.set_ollama_model, { range = true, nargs = 1 })
     vim.api.nvim_create_user_command('LLMRequesterSetOpenaiModel', Tools.set_openai_model, { range = true, nargs = 1 })
-    Tools.send_start_session()
+
+    fn.jobstart({'sleep', '1'}, {
+        on_exit = function(_, exit_code)
+            Tools.send_start_session()
+        end
+    })
+
 end
 
 function Tools.set_ollama_model(attr)
@@ -221,6 +229,7 @@ function Tools.make_user_request(message)
     local json_data = vim.json.encode({
         input = message,
         context = make_editor_context(),
+        session_id = session_id,
     })
     utils.append_to_buf(response_buf, {'', 'Agent:', ''})
     fn.jobstart({'curl', '-s',
@@ -286,6 +295,7 @@ function Tools.send_approve(request_id, approve)
     local json_data = vim.json.encode({
         request_id = request_id,
         approve = approve,
+        session_id = session_id,
     })
     fn.jobstart({'curl', '-s',
                  '-X', 'POST',
@@ -307,8 +317,12 @@ function Tools.send_start_session()
         api_key = config.openai_api_key,
         temperature = config.temperature,
         context_size = config.context_size,
+        stream = config.stream,
     })
     local handle = function(_, data)
+        local response = table.concat(data, '')
+        local success, decoded = pcall(vim.json.decode, response)
+        session_id = decoded.session_id
     end
     local handle_on_exit = function(_, exit_code)
     end
