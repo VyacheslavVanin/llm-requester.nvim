@@ -191,7 +191,6 @@ local function handle(_, data)
     local response = table.concat(data, '')
     local success, decoded = pcall(vim.json.decode, response)
     if success then
-        utils.append_to_buf(response_buf, {'', 'Agent:'})
         utils.append_to_buf(response_buf, vim.split(decoded.message, '\n'))
         utils.scroll_window_end(response_win)
         if decoded.requires_approval then
@@ -254,7 +253,7 @@ function Tools.make_user_request(message)
         context = make_editor_context(),
         session_id = session_id,
     })
-    utils.append_to_buf(response_buf, {'', 'Agent:', ''})
+    utils.append_to_buf(response_buf, {'', 'Agent:'})
     fn.jobstart({'curl', '-s',
                  '-X', 'POST',
                  '-H', 'Content-Type: application/json',
