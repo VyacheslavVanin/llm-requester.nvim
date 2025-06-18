@@ -215,7 +215,7 @@ function Completion.show()
             on_stdout = function(_, data)
                 local response = table.concat(data, '')
                 local ok, result = pcall(vim.json.decode, response)
-                result = result.reponse or result
+                result = result.response or result
                 if ok and result.choices and result.choices[1] and result.choices[1].message then
                     local suggestions = {}
                     local content = get_text_inside_tags(result.choices[1].message.content, 'completion')
