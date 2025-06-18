@@ -10,7 +10,7 @@ local default_config = {
     ollama_model = 'llama2',
     ollama_url = 'http://localhost:11434/api/chat',
     openai_model = 'llama2',
-    openai_url = 'https://openrouter.ai/api/v1/chat/completions',
+    openai_url = 'https://openrouter.ai/api/v1',
     openai_api_key = '', -- Set your OpenAI API key here or via setup()
     keys = {
         trigger = '<C-Tab>',
@@ -42,7 +42,7 @@ You must replace '<<<CURSOR>>>' with your completion.
 
 Complete whole one code block if possible: function, class, loop with body, condition with body and etc.
 Your response combied with user request must form correct expressions of programming language.
-Explain step by step in <explanation> section how your completion solves the task.
+No need to add additional explanations and commentaries, just completion.
 
 
 ## Examples
@@ -211,10 +211,11 @@ function Completion.show()
             'Content-Type: application/json'
         }
 
-        fn.jobstart({'curl', '-s', '-X', 'POST', config.openai_url, '-H', headers[1], '-H', headers[2], '-d', json_data}, {
+        fn.jobstart({'curl', '-s', '-X', 'POST', config.openai_url .. '/chat/completions', '-H', headers[1], '-H', headers[2], '-d', json_data}, {
             on_stdout = function(_, data)
                 local response = table.concat(data, '')
                 local ok, result = pcall(vim.json.decode, response)
+                result = result.reponse or result
                 if ok and result.choices and result.choices[1] and result.choices[1].message then
                     local suggestions = {}
                     local content = get_text_inside_tags(result.choices[1].message.content, 'completion')
