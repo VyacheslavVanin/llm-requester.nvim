@@ -27,6 +27,7 @@ local config = {
         clear_keys = '<leader>cc', -- reset chat
         stream = false,
         max_rps = 100,  -- limit llm request rate
+        no_verify_ssl = false,
     },
     completion = {
         ollama_model = 'llama2',

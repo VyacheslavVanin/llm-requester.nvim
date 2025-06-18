@@ -23,6 +23,7 @@ Chat.default_config = {
     history_keys = '<leader>h',
     clear_keys = '<leader>cc',
     stream = false,
+    no_verify_ssl = false,
 }
 
 local config = vim.deepcopy(Chat.default_config)

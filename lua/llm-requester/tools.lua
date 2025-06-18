@@ -25,6 +25,7 @@ Tools.default_config = {
     clear_keys = '<leader>cc',
     stream = true,
     max_rps = 100,
+    no_verify_ssl = false,
 }
 
 local utils = require("llm-requester.utils")
@@ -86,6 +87,9 @@ function Tools.setup(main_config)
     if config.temperature ~= nil then
         table.insert(command, '--temperature')
         table.insert(command, config.temperature)
+    end
+    if config.no_verify_ssl then
+        table.insert(command, '--no-verify-ssl')
     end
     fn.jobstart(command,
         {
