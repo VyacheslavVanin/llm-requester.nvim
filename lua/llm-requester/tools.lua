@@ -26,6 +26,7 @@ Tools.default_config = {
     stream = true,
     max_rps = 100,
     no_verify_ssl = false,
+    server_port = 8000,
 }
 
 local utils = require("llm-requester.utils")
@@ -75,6 +76,7 @@ function Tools.setup(main_config)
             '--provider', config.api_type,
             '--context-size', config.context_size,
             '--max-rps', config.max_rps,
+            '--port', config.server_port
         }
     if config.top_p ~= nil then
         table.insert(command, '--top_p')
@@ -261,7 +263,7 @@ function Tools.make_user_request(message)
     fn.jobstart({'curl', '-s',
                  '-X', 'POST',
                  '-H', 'Content-Type: application/json',
-                 'http://localhost:8000/user_request',
+                 'http://localhost:' .. config.server_port .. '/user_request',
                  '-d', json_data}, {
         on_stdout = (config.stream and handle_streaming_response) or handle,
         on_exit = handle_on_exit,
@@ -326,7 +328,7 @@ function Tools.send_approve(request_id, approve)
     fn.jobstart({'curl', '-s',
                  '-X', 'POST',
                  '-H', 'Content-Type: application/json',
-                 'http://localhost:8000/approve',
+                 'http://localhost:' .. config.server_port .. '/approve',
                  '-d', json_data}, {
         on_stdout = (config.stream and handle_streaming_response) or handle,
         on_exit = handle_on_exit,
@@ -362,7 +364,7 @@ function Tools.send_start_session(chat_type)
     fn.jobstart({'curl', '-s',
                  '-X', 'POST',
                  '-H', 'Content-Type: application/json',
-                 'http://localhost:8000/start_session',
+                 'http://localhost:' .. config.server_port .. '/start_session',
                  '-d', json_data}, {
         on_stdout = handle,
         on_exit = handle_on_exit,
