@@ -131,7 +131,20 @@ function Tools.set_openai_model(attr)
     config.openai_model = attr.fargs[1]
 end
 
-local prompt_win, prompt_buf, response_win, response_buf
+local prompt_win, response_win
+
+local ChatData = {
+    chat = {
+        prompt_buf = nil,
+        response_buf = nil,
+        session_id = nil,
+    },
+    agent = {
+        prompt_buf = nil,
+        response_buf = nil,
+        session_id = nil,
+    }
+}
 
 function Tools.open_chat_window()
     Tools.open_chat_window_impl('chat')
@@ -147,22 +160,18 @@ function Tools.open_chat_window_impl(chat_type)
         return
     end
 
-    if chat_type == 'chat' then
-        if chat_session_id == nil then
-            Tools.send_start_session('chat')
-        end
-        session_id = chat_session_id
-    elseif chat_type == 'agent' then
-        if agent_session_id == nil then
-            Tools.send_start_session('agent')
-        end
-        session_id = agent_session_id
+    local cdata = ChatData[chat_type]
+    if cdata.session_id == nil then
+        Tools.send_start_session(chat_type)
     end
-    current_chat_type = chat_type
+    session_id = cdata.session_id
 
-    prompt_win, prompt_buf, response_win, response_buf =
+    current_chat_type = chat_type
+    local cdata = ChatData[chat_type]
+
+    prompt_win, cdata.prompt_buf, response_win, cdata.response_buf =
         utils.create_chat_split(config.split_ratio, config.prompt_split_ratio,
-                                prompt_buf, response_buf)
+                                cdata.prompt_buf, cdata.response_buf)
 
     -- Set keymaps
     local close_func = function() 
@@ -172,15 +181,17 @@ function Tools.open_chat_window_impl(chat_type)
 
     vim.keymap.set('v', config.close_keys, close_func, { desc = 'Close LLMRequester window' })
     vim.keymap.set('n', config.close_keys, close_func, { desc = 'Close LLMRequester window' })
-    api.nvim_buf_set_keymap(prompt_buf, 'i', '<M-CR>', '', { callback = Tools.send_request })
-    api.nvim_buf_set_keymap(prompt_buf, 'n', config.request_keys, '', { callback = Tools.send_request })
-    api.nvim_buf_set_keymap(prompt_buf, 'n', config.close_keys, '', { callback = close_func })
-    api.nvim_buf_set_keymap(prompt_buf, 'n', config.clear_keys, '', { callback = Tools.clear_chat })
-    api.nvim_buf_set_keymap(response_buf, 'n', config.close_keys, '', { callback = close_func })
-    api.nvim_buf_set_keymap(response_buf, 'n', config.clear_keys, '', { callback = Tools.clear_chat })
+    api.nvim_buf_set_keymap(cdata.prompt_buf, 'i', '<M-CR>', '', { callback = Tools.send_request })
+    api.nvim_buf_set_keymap(cdata.prompt_buf, 'n', config.request_keys, '', { callback = Tools.send_request })
+    api.nvim_buf_set_keymap(cdata.prompt_buf, 'n', config.close_keys, '', { callback = close_func })
+    api.nvim_buf_set_keymap(cdata.prompt_buf, 'n', config.clear_keys, '', { callback = Tools.clear_chat })
+    api.nvim_buf_set_keymap(cdata.response_buf, 'n', config.close_keys, '', { callback = close_func })
+    api.nvim_buf_set_keymap(cdata.response_buf, 'n', config.clear_keys, '', { callback = Tools.clear_chat })
 end
 
 function Tools.send_request()
+    local prompt_buf = ChatData[current_chat_type].prompt_buf
+    local response_buf = ChatData[current_chat_type].response_buf
     local content = utils.get_content(prompt_buf)
     local text = table.concat(content, '\n')
     utils.append_to_buf(response_buf, vim.list_extend({'', 'Me:'}, content))
@@ -190,11 +201,13 @@ function Tools.send_request()
 end
 
 function Tools.clear_chat()
+    local response_buf = ChatData[current_chat_type].response_buf
     Tools.send_start_session(current_chat_type)
     utils.show_in_buf(response_buf, {})
 end
 
 local function handle(_, data)
+    local response_buf = ChatData[current_chat_type].response_buf
     local response = table.concat(data, '')
     local success, decoded = pcall(vim.json.decode, response)
     if success then
@@ -210,6 +223,7 @@ local function handle_on_exit(_, exit_code)
 end
 
 local function handle_streaming_response(_, data)
+    local response_buf = ChatData[current_chat_type].response_buf
     if #data > 0 then
         for _, line in ipairs(data) do
             api.nvim_buf_set_option(response_buf, 'modifiable', true)
@@ -260,6 +274,7 @@ function Tools.make_user_request(message)
         context = make_editor_context(),
         session_id = session_id,
     })
+    local response_buf = ChatData[current_chat_type].response_buf
     utils.append_to_buf(response_buf, {'', 'Agent:'})
     fn.jobstart({'curl', '-s',
                  '-X', 'POST',
@@ -352,13 +367,9 @@ function Tools.send_start_session(chat_type)
     local handle = function(_, data)
         local response = table.concat(data, '')
         local success, decoded = pcall(vim.json.decode, response)
-        if chat_type == 'chat' then
-            chat_session_id = decoded.session_id
-            session_id = chat_session_id
-        elseif chat_type == 'agent' then
-            agent_session_id = decoded.session_id
-            session_id = agent_session_id
-        end 
+        local cdata = ChatData[chat_type]
+        cdata.session_id = decoded.session_id
+        session_id = cdata.session_id
     end
     local handle_on_exit = function(_, exit_code)
     end
