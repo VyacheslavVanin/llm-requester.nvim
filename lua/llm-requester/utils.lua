@@ -105,6 +105,8 @@ local function setup_buffer(win, buf, filetype, modifiable)
     api.nvim_win_set_option(win, 'relativenumber', false)
     api.nvim_buf_set_option(buf, 'filetype', filetype)
     api.nvim_buf_set_option(buf, 'modifiable', modifiable)
+    api.nvim_buf_set_option(buf, 'wrap', true)
+    api.nvim_buf_set_option(buf, 'linebreak', true)
 end
 
 -- create Scratch split with command.
