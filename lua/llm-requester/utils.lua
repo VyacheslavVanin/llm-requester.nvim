@@ -110,28 +110,36 @@ end
 -- create Scratch split with command.
 -- syntax is optional param (default: 'markdown').
 -- returns created win, buf descriptors
-function Utils.create_scratch_split(command, mutable, syntax)
+function Utils.create_scratch_split(command, mutable, syntax, prev_buf)
     command = command or 'vsplit'
     syntax = syntax or 'markdown'
     mutable = mutable or false
     api.nvim_command(command)
     local win = api.nvim_get_current_win()
-    local buf = api.nvim_create_buf(false, true)
+    local buf = prev_buf or api.nvim_create_buf(false, true)
     api.nvim_win_set_buf(win, buf)
-    setup_buffer(win, buf, syntax, mutable)
+    if buf ~= prev_buf then
+        setup_buffer(win, buf, syntax, mutable)
+    end
     return win, buf
 end
 
 
 -- Helper function to create chat windows
-function Utils.create_chat_split(hsplit_ratio, vsplit_ratio)
+function Utils.create_chat_split(hsplit_ratio, vsplit_ratio,
+                                 prev_prompt_buf,
+                                 prev_response_buf)
     local total_width = vim.o.columns
     local total_height = vim.o.lines - 1
 
     -- Create vertical split for prompt window
-    local prompt_win, prompt_buf = Utils.create_scratch_split('vsplit', true)
+    local prompt_win, prompt_buf = Utils.create_scratch_split(
+        'vsplit', true, 'markdown', prev_prompt_buf
+    )
     -- Create horizontal split for response window
-    local response_win, response_buf = Utils.create_scratch_split('split', false)
+    local response_win, response_buf = Utils.create_scratch_split(
+        'split', false, 'markdown', prev_response_buf
+    )
 
     -- Set dimensions based on ratios
     local prompt_width = math.floor(total_width * hsplit_ratio)

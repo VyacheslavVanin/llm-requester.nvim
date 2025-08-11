@@ -161,7 +161,8 @@ function Tools.open_chat_window_impl(chat_type)
     current_chat_type = chat_type
 
     prompt_win, prompt_buf, response_win, response_buf =
-        utils.create_chat_split(config.split_ratio, config.prompt_split_ratio)
+        utils.create_chat_split(config.split_ratio, config.prompt_split_ratio,
+                                prompt_buf, response_buf)
 
     -- Set keymaps
     local close_func = function() 
