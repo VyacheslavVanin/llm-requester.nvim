@@ -74,21 +74,21 @@ function Tools.setup(main_config)
             '--ollama-base-url', config.ollama_url,
             '--openai-base-url', config.openai_url,
             '--provider', config.api_type,
-            '--context-size', config.context_size,
-            '--max-rps', config.max_rps,
-            '--port', config.server_port
+            '--context-size', tostring(config.context_size),
+            '--max-rps', tostring(config.max_rps),
+            '--port', tostring(config.server_port)
         }
     if config.top_p ~= nil then
         table.insert(command, '--top_p')
-        table.insert(command, config.top_p)
+        table.insert(command, tostring(config.top_p))
     end
     if config.top_k ~= nil then
         table.insert(command, '--top_k')
-        table.insert(command, config.top_k)
+        table.insert(command, tostring(config.top_k))
     end
     if config.temperature ~= nil then
         table.insert(command, '--temperature')
-        table.insert(command, config.temperature)
+        table.insert(command, tostring(config.temperature))
     end
     if config.no_verify_ssl then
         table.insert(command, '--no-verify-ssl')
