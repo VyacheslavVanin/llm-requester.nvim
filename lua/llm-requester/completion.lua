@@ -161,7 +161,7 @@ function Completion.show()
             vim.api.nvim_win_close(completion_win, true)
             -- Insert text and restore insert mode if needed
             local row, col = unpack(vim.api.nvim_win_get_cursor(0))
-            vim.api.nvim_put(selection, 'c', true, true)
+            vim.api.nvim_put(selection, 'c', false, true)
             is_completing = false
             return ''
         end,
