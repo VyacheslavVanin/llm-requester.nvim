@@ -23,14 +23,13 @@ Install using your preferred Neovim package manager.
 - Trigger completions with `<C-Tab>` in insert mode
 - Confirm selection with `<Tab>`
 - Context-aware suggestions based on surrounding code
-- Displays in a floating window
 
 ## Configuration
 
 ```lua
 require('llm-requester').setup({
     chat = {
-        api_type = 'ollama', -- 'ollama' or 'openai'
+        api_type = 'ollama',  -- 'ollama' or 'openai'
         ollama_model = 'llama2',
         ollama_url = 'http://localhost:11434/api/chat',
         openai_model = 'gpt-4o-mini',
@@ -49,18 +48,21 @@ require('llm-requester').setup({
         stream = false, -- Enable streaming responses
     },
     completion = {
+        api_type = 'ollama', -- 'ollama' or 'openai'
         ollama_model = 'llama2',
+        ollama_url = 'http://localhost:11434/api/chat',
+        openai_model = 'llama2',
+        openai_url = 'https://openrouter.ai/api/v1',
+        openai_api_key = '<API_KEY>', -- Set your OpenAI API key here or via setup()
         keys = {
             trigger = '<C-Tab>',
             confirm = '<Tab>',
         },
-        context_lines = 3, -- Lines of context to send
-        context_size = 16384, -- maximum context size in tokens
-        menu_height = 10, -- Max completion menu height
-        menu_width = 50, -- Completion menu width
-        menu_hl = 'NormalFloat', -- Highlight group
-        menu_border = 'rounded', -- Border style
-        url = 'http://localhost:11434/api/chat',
+        context_lines = 20,  -- number of lines before and after cursor position
+        menu_height = 10,
+        menu_width = 50,
+        menu_hl = 'NormalFloat',
+        menu_border = 'rounded',
     }
 })
 ```
@@ -68,7 +70,8 @@ require('llm-requester').setup({
 ## Keymaps
 
 ### Chat
-- `<leader>ai`: Open chat window
+- `<leader>ac`: Open chat window
+- `<leader>ai`: Open agent chat window (can call tools)
 - `<leader>r`: Send request
 - `<leader>q`: Close windows
 - `<leader>cc`: Clear chat and history
