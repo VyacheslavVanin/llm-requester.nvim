@@ -1,7 +1,7 @@
 local api = vim.api
 local fn = vim.fn
 
-local Completion = require('llm-requester.completion')
+local Completion = require('llm-requester.completion.completion')
 local Tools = require("llm-requester.tools")
 
 local M = {}
