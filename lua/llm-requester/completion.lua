@@ -119,10 +119,6 @@ function Completion.show()
     local context = table.concat({
         context_before .. '<<<CURSOR>>>' .. context_after,
     }, '\n') 
-    --local context = table.concat({
-    --    '<pre_cursor>' .. context_before .. '</pre_cursor>',
-    --    '<post_cursor>' .. context_after .. '</post_cursor>',
-    --}, '\n') 
 
     completion_buf = vim.api.nvim_create_buf(false, true)
     vim.api.nvim_buf_set_option(completion_buf, 'buftype', 'nofile')
@@ -160,7 +156,6 @@ function Completion.show()
             local selection = api.nvim_buf_get_lines(completion_buf, 0, -1, false)
             vim.api.nvim_win_close(completion_win, true)
             -- Insert text and restore insert mode if needed
-            local row, col = unpack(vim.api.nvim_win_get_cursor(0))
             vim.api.nvim_put(selection, 'c', false, true)
             is_completing = false
             return ''
