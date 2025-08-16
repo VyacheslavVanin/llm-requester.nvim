@@ -95,7 +95,7 @@ function get_context_before(cursor)
         line, cursor[2],
         {}
     )
-    return table.concat(lines, '\n')
+    return lines
 end
 
 function get_context_after(cursor)
@@ -106,9 +106,19 @@ function get_context_after(cursor)
         math.min(line_count-1, line + config.context_lines), 10000,
         {}
     )
-    return table.concat(lines, '\n')
+    return lines
 end
 
+-- Insert lines in current cursor position
+local function insert_lines(lines)
+    local cursor = vim.api.nvim_win_get_cursor(0)
+    local current_line = cursor[1] - 1
+    local current_col = cursor[2]
+
+    local current_line = vim.api.nvim_get_current_line()
+    local after = #current_line == current_col + 1
+    vim.api.nvim_put(lines, 'c', after, true)
+end
 
 function Completion.show()
     if is_completing then
@@ -117,11 +127,9 @@ function Completion.show()
     is_completing = true
 
     local cursor = vim.api.nvim_win_get_cursor(0)
-    local context_before = get_context_before(cursor)
-    local context_after = get_context_after(cursor)
-    local context = table.concat({
-        context_before .. '<<<CURSOR>>>' .. context_after,
-    }, '\n') 
+    local context_before = table.concat(get_context_before(cursor), '\n')
+    local context_after = table.concat(get_context_after(cursor), '\n')
+    local context = context_before .. '<<<CURSOR>>>' .. context_after
 
     completion_buf = vim.api.nvim_create_buf(false, true)
     vim.api.nvim_buf_set_option(completion_buf, 'buftype', 'nofile')
@@ -157,7 +165,7 @@ function Completion.show()
         local selection = api.nvim_buf_get_lines(completion_buf, 0, -1, false)
         vim.api.nvim_win_close(completion_win, true)
         -- Insert text and restore insert mode if needed
-        vim.api.nvim_put(selection, 'c', false, true)
+        insert_lines(selection)
         is_completing = false
         return ''
     end
