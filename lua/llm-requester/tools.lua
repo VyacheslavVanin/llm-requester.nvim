@@ -280,39 +280,42 @@ end
 function Tools.process_required_approval(decoded)
     local message = decoded.message
     local request_id = decoded.request_id
-    local tool = decoded.tool
-    local popup_content = "LLM wants to use tool:\n - " .. format_tool(tool) .. "\n" ..
-                          "approve ((y)es/(n)o/(A)lways approve)?"
-    local function on_approve()
-        Tools.send_approve(request_id, true)
-        approve_window_shown = false
-    end
-    local function on_always_approve()
-        Tools.send_approve(request_id, true)
-        always_approve_set[tool.name] = true
-        approve_window_shown = false
-    end
-    local function on_deny()
-        Tools.send_approve(request_id, false)
-        approve_window_shown = false
-    end
-
-    if always_approve_set[tool.name] then
-        if tool.arguments.path == nil or utils.is_subdirectory(tool.arguments.path, vim.fn.getcwd()) then
-            on_approve()
-            return
+    local tools = decoded.tools
+    for _, tool in ipairs(tools) do
+        local function on_approve()
+            Tools.send_approve(request_id, true)
+            approve_window_shown = false
         end
-    end
 
-    approve_window_shown = true
-    utils.show_choose_window(
-        popup_content,
-        {
-            y = on_approve,
-            n = on_deny,
-            A = on_always_approve,
-        }
-    )
+        if always_approve_set[tool.name] then
+            if tool.arguments.path == nil or utils.is_subdirectory(tool.arguments.path, vim.fn.getcwd()) then
+                on_approve()
+                return
+            end
+        end
+
+        local popup_content = "LLM wants to use tool:\n - " .. format_tool(tool) .. "\n" ..
+                              "approve ((y)es/(n)o/(A)lways approve)?"
+        local function on_always_approve()
+            Tools.send_approve(request_id, true)
+            always_approve_set[tool.name] = true
+            approve_window_shown = false
+        end
+        local function on_deny()
+            Tools.send_approve(request_id, false)
+            approve_window_shown = false
+        end
+
+        approve_window_shown = true
+        utils.show_choose_window(
+            popup_content,
+            {
+                y = on_approve,
+                n = on_deny,
+                A = on_always_approve,
+            }
+        )
+    end
 end
 
 function Tools.send_approve(request_id, approve)
