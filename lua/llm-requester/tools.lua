@@ -173,6 +173,9 @@ function Tools.open_chat_window_impl(chat_type)
         utils.create_chat_split(config.split_ratio, config.prompt_split_ratio,
                                 cdata.prompt_buf, cdata.response_buf)
 
+    api.nvim_buf_set_name(cdata.prompt_buf, "[" .. chat_type .. "] Enter your prompt:")
+    api.nvim_buf_set_name(cdata.response_buf, "[" .. chat_type .. "] Response:")
+
     -- Set keymaps
     local close_func = function() 
         if api.nvim_win_is_valid(prompt_win) then api.nvim_win_close(prompt_win, true) end
@@ -204,6 +207,8 @@ function Tools.clear_chat()
     local response_buf = ChatData[current_chat_type].response_buf
     Tools.send_start_session(current_chat_type)
     utils.show_in_buf(response_buf, {})
+
+    api.nvim_set_current_win(prompt_win)
 end
 
 local function handle(_, data)
