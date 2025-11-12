@@ -37,8 +37,11 @@ function Utils.handle_openai_request(system_message, ctx, completion_buf, comple
         'Authorization: Bearer ' .. config.openai_api_key,
         'Content-Type: application/json'
     }
+    -- store json_data to temporal file in /tmp/
+    local temp_file = '/tmp/llm-completion-data.json'
+    fn.writefile({json_data}, temp_file)
 
-    fn.jobstart({'curl', '-s', '-X', 'POST', config.openai_url .. '/chat/completions', '-H', headers[1], '-H', headers[2], '-d', json_data}, {
+    fn.jobstart({'curl', '-s', '-X', 'POST', config.openai_url .. '/chat/completions', '-H', headers[1], '-H', headers[2], '--data-binary', '@' .. temp_file}, {
         on_stdout = function(_, data)
             local response = table.concat(data, '')
             local ok, result = pcall(vim.json.decode, response)
@@ -99,8 +102,11 @@ function Utils.handle_ollama_request(system_message, ctx, completion_buf, comple
             num_ctx = config.context_size
         }
     })
+    -- store json_data to temporal file in /tmp/
+    local temp_file = '/tmp/llm-completion-data.json'
+    fn.writefile({json_data}, temp_file)
 
-    fn.jobstart({'curl', '-s', '-X', 'POST', config.ollama_url, '-d', json_data}, {
+    fn.jobstart({'curl', '-s', '-X', 'POST', config.ollama_url, '--data-binary', '@' .. temp_file}, {
         on_stdout = function(_, data)
             local response = table.concat(data, '')
             local ok, result = pcall(vim.json.decode, response)
