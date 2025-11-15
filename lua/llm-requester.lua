@@ -28,6 +28,7 @@ local config = {
         stream = false,
         max_rps = 100,  -- limit llm request rate
         no_verify_ssl = false,
+        timeout = nil,
     },
     completion = {
         ollama_model = 'llama2',

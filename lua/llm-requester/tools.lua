@@ -27,6 +27,7 @@ Tools.default_config = {
     max_rps = 100,
     no_verify_ssl = false,
     server_port = 8000,
+    timeout = nil,
 }
 
 local utils = require("llm-requester.utils")
@@ -76,7 +77,7 @@ function Tools.setup(main_config)
             '--provider', config.api_type,
             '--context-size', tostring(config.context_size),
             '--max-rps', tostring(config.max_rps),
-            '--port', tostring(config.server_port)
+            '--port', tostring(config.server_port),
         }
     if config.top_p ~= nil then
         table.insert(command, '--top_p')
@@ -92,6 +93,10 @@ function Tools.setup(main_config)
     end
     if config.no_verify_ssl then
         table.insert(command, '--no-verify-ssl')
+    end
+    if config.timeout then
+        table.insert(command, '--timeout')
+        table.insert(command, tostring(config.timeout))
     end
     fn.jobstart(command,
         {
