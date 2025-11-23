@@ -143,13 +143,39 @@ local ChatData = {
         prompt_buf = nil,
         response_buf = nil,
         session_id = nil,
+        usage = nil,
     },
     agent = {
         prompt_buf = nil,
         response_buf = nil,
         session_id = nil,
+        usage = nil,
     }
 }
+
+local function format_usage(usage)
+    if usage == nil then
+        return ""
+    end
+    return "(total/in/out: " .. tostring(usage.total_tokens) .. "/" .. tostring(usage.input) .. "/" .. tostring(usage.output) .. ")"
+end
+
+local function add_usage(usage_l, usage_r)
+    if usage_l == nil then
+        return usage_r
+    end
+
+    if usage_r == nil then
+        return usage_l
+    end
+
+    return {
+        total_tokens = usage_l.total_tokens + usage_r.total_tokens,
+        input = usage_l.input + usage_r.input,
+        output = usage_l.output + usage_r.output,
+    }
+end
+
 
 function Tools.open_chat_window()
     Tools.open_chat_window_impl('chat')
@@ -179,7 +205,7 @@ function Tools.open_chat_window_impl(chat_type)
                                 cdata.prompt_buf, cdata.response_buf)
 
     api.nvim_buf_set_name(cdata.prompt_buf, "[" .. chat_type .. "] Enter your prompt:")
-    api.nvim_buf_set_name(cdata.response_buf, "[" .. chat_type .. "] Response:")
+    api.nvim_buf_set_name(cdata.response_buf, "[" .. current_chat_type .. "] Response " .. format_usage(cdata.usage) .. ":")
 
     -- Set keymaps
     local close_func = function() 
@@ -209,9 +235,12 @@ function Tools.send_request()
 end
 
 function Tools.clear_chat()
-    local response_buf = ChatData[current_chat_type].response_buf
+    local cdata = ChatData[current_chat_type]
+    local response_buf = cdata.response_buf
     Tools.send_start_session(current_chat_type)
     utils.show_in_buf(response_buf, {})
+    cdata.usage = nil
+    api.nvim_buf_set_name(cdata.response_buf, "[" .. current_chat_type .. "] Response:")
 
     api.nvim_set_current_win(prompt_win)
 end
@@ -221,6 +250,12 @@ local function handle(_, data)
     local response = table.concat(data, '')
     local success, decoded = pcall(vim.json.decode, response)
     if success then
+        if decoded.usage and decoded.usage ~= vim.NIL then
+            local cdata = ChatData[current_chat_type]
+            cdata.usage = add_usage(cdata.usage, decoded.usage)
+            api.nvim_buf_set_name(cdata.response_buf, "[" .. current_chat_type .. "] Response " .. format_usage(cdata.usage) .. ":")
+        end
+
         utils.append_to_buf(response_buf, vim.split(decoded.message, '\n'))
         utils.scroll_window_end(response_win)
         if decoded.requires_approval then
@@ -238,6 +273,12 @@ local function handle_streaming_response(_, data)
         for _, line in ipairs(data) do
             api.nvim_buf_set_option(response_buf, 'modifiable', true)
             json_reconstruct.process_part(line, function(decoded)
+                if decoded.usage and decoded.usage ~= vim.NIL then
+                    local cdata = ChatData[current_chat_type]
+                    cdata.usage = add_usage(cdata.usage, decoded.usage)
+                    api.nvim_buf_set_name(cdata.response_buf, "[" .. current_chat_type .. "] Response " .. format_usage(cdata.usage) .. ":")
+                end
+
                 utils.append_to_last_line(response_buf, decoded.message)
                 if decoded.request_id and decoded.request_id ~= vim.NIL then
                     Tools.process_required_approval(decoded)
