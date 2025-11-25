@@ -43,7 +43,6 @@ require('llm-requester').setup({
         open_prompt_window_key = '<leader>ai',
         request_keys = '<leader>r',
         close_keys = '<leader>q',
-        history_keys = '<leader>h',
         clear_keys = '<leader>cc',
         stream = false, -- Enable streaming responses
     },
@@ -82,7 +81,8 @@ require('llm-requester').setup({
 - `<Tab>`: Confirm selection
 
 ## Commands
-- `:LLMRequester`: Opens the chat window
+- `:LLMRequesterChat`: Opens the chat window
+- `:LLMRequesterAgent`: Opens the agent chat window
 - `:LLMRequesterSetOllamaModel <model-name>`: Set config.ollama_model
 - `:LLMRequesterSetOpenaiModel <model-name>`: Set config.openai_model
 
