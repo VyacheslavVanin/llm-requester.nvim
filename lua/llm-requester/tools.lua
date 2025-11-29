@@ -28,6 +28,7 @@ Tools.default_config = {
     no_verify_ssl = false,
     server_port = 8000,
     timeout = nil,
+    autoapprove_count = 10,  -- Number of times tool can be autoapproved before next approve window is shown
 }
 
 local utils = require("llm-requester.utils")
@@ -35,12 +36,17 @@ local json_reconstruct = require("llm-requester.json_reconstruct")
 
 local config = vim.deepcopy(Tools.default_config)
 local approve_window_shown = false
+
 local always_approve_set = {
     list_files = true,
     read_file = true,
-    create_directory = true,
-    edit_files = true,
-    write_whole_file = true,
+}
+
+-- Here are tools that have only auto aprove only for count times
+local limited_approve_set = {
+    create_directory = 10,
+    edit_files = 10,
+    write_whole_file = 10,
 }
 
 local chat_session_id = nil
@@ -339,8 +345,18 @@ function Tools.process_required_approval(decoded)
             approve_window_shown = false
         end
 
+        -- process autoapprove
         if always_approve_set[tool.name] then
             if tool.arguments.path == nil or utils.is_subdirectory(tool.arguments.path, vim.fn.getcwd()) then
+                on_approve()
+                return
+            end
+        end
+
+        -- process limited autoapprove
+        if limited_approve_set[tool.name] ~= nil and limited_approve_set[tool.name] > 0 then
+            if tool.arguments.path == nil or utils.is_subdirectory(tool.arguments.path, vim.fn.getcwd()) then
+                limited_approve_set[tool.name] = limited_approve_set[tool.name] - 1
                 on_approve()
                 return
             end
@@ -350,7 +366,7 @@ function Tools.process_required_approval(decoded)
                               "approve ((y)es/(n)o/(A)lways approve)?"
         local function on_always_approve()
             Tools.send_approve(request_id, true)
-            always_approve_set[tool.name] = true
+            limited_approve_set[tool.name] = config.autoapprove_count
             approve_window_shown = false
         end
         local function on_deny()
