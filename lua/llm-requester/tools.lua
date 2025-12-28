@@ -192,6 +192,30 @@ function Tools.open_agent_window()
     Tools.open_chat_window_impl('agent')
 end
 
+function Tools.fold_all_tool_calls(buf)
+    -- Fold all text between BEGIN_USE_TOOL and END_USE_TOOL tags
+    local lines = api.nvim_buf_get_lines(buf, 0, -1, false)
+    local folds = {}
+
+    -- Find all BEGIN_USE_TOOL and END_USE_TOOL pairs
+    local start_line = nil
+    for i, line in ipairs(lines) do
+        if line:match("BEGIN_USE_TOOL") then
+            start_line = i - 1  -- Convert to 0-indexed
+        elseif line:match("END_USE_TOOL") and start_line ~= nil then
+            table.insert(folds, {start_line, i - 1})  -- Convert to 0-indexed
+            start_line = nil
+        end
+    end
+
+    -- Apply folds
+    for _, fold in ipairs(folds) do
+        api.nvim_buf_call(buf, function()
+            vim.cmd(fold[1] + 1 .. "," .. fold[2] + 1 .. "fold")
+        end)
+    end
+end
+
 function Tools.open_chat_window_impl(chat_type)
     if (prompt_win and api.nvim_win_is_valid(prompt_win)) or
        (response_win and api.nvim_win_is_valid(response_win)) then
@@ -264,6 +288,7 @@ local function handle(_, data)
         end
 
         utils.append_to_buf(response_buf, vim.split(decoded.message, '\n'))
+        Tools.fold_all_tool_calls(response_buf)
         utils.scroll_window_end(response_win)
         if decoded.requires_approval then
             Tools.process_required_approval(decoded)
@@ -290,6 +315,7 @@ local function handle_streaming_response(_, data)
                 if decoded.request_id and decoded.request_id ~= vim.NIL then
                     Tools.process_required_approval(decoded)
                 end
+                Tools.fold_all_tool_calls(response_buf)
                 utils.scroll_window_end(response_win)
             end)
             api.nvim_buf_set_option(response_buf, 'modifiable', false)
