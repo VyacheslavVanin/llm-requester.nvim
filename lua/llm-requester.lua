@@ -8,10 +8,7 @@ local M = {}
 
 local config = {
     chat = {
-        api_type = 'ollama', -- 'ollama' or 'openai'
-
-        ollama_url = 'http://localhost:11434/api/chat',
-        ollama_model = 'llama2',
+        api_type = 'openai', -- 'openai' only
 
         openai_url = 'https://api.openai.com/v1/chat/completions',
         openai_api_key = '', -- Set your OpenAI API key here or via setup()
@@ -31,7 +28,7 @@ local config = {
         timeout = nil,
     },
     completion = {
-        ollama_model = 'llama2',
+        openai_model = 'gpt-4o-mini',
         keys = {
             trigger = '<C-Tab>',
             confirm = '<Tab>',
@@ -57,8 +54,8 @@ function M.setup(user_config)
         -- For backward compatibility
         local d = Tools.default_config
         chat_config = vim.deepcopy(d)
-        chat_config.ollama_url = config.url or d.ollama_url
-        chat_config.ollama_model = config.model or d.ollama_mode
+        chat_config.openai_url = config.url or d.openai_url
+        chat_config.openai_model = config.model or d.openai_model
         chat_config.split_ratio = config.split_ratio or d.split_ratio
         chat_config.prompt_split_ratio = config.prompt_split_ratio or d.prompt_split_ratio
         chat_config.prompt = config.prompt or d.prompt

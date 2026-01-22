@@ -83,68 +83,6 @@ function Utils.handle_openai_request(system_message, ctx, completion_buf, comple
 end
 
 
-function Utils.handle_ollama_request(system_message, ctx, completion_buf, completion_win, config, on_close_fn)
-    local json_data = vim.json.encode({
-        model = config.ollama_model,
-        messages = {
-            {
-                role = "system",
-                content = system_message
-            },
-            {
-                role = "user",
-                content = ctx
-            }
-        },
-        stream = false,
-        options = {
-            temperature = 0.2,
-            num_ctx = config.context_size
-        }
-    })
-    -- store json_data to temporal file in /tmp/
-    local temp_file = '/tmp/llm-completion-data.json'
-    fn.writefile({json_data}, temp_file)
-
-    fn.jobstart({'curl', '-s', '-X', 'POST', config.ollama_url, '--data-binary', '@' .. temp_file}, {
-        on_stdout = function(_, data)
-            local response = table.concat(data, '')
-            local ok, result = pcall(vim.json.decode, response)
-            if ok and result.message and result.message.content then
-                local suggestions = {}
-                local content = get_text_inside_tags(result.message.content, 'completion')
-                if content == nil then
-                    on_close_fn()
-                    return
-                end
-                for line in vim.gsplit(content, '\n') do
-                    if line ~= '' then
-                        table.insert(suggestions, line)
-                    end
-                end
-                vim.schedule(function()
-                    if vim.api.nvim_win_is_valid(completion_win) then
-                        vim.api.nvim_buf_set_lines(completion_buf, 0, -1, false, suggestions)
-                        vim.api.nvim_win_set_height(completion_win,
-                            math.min(#suggestions, config.menu_height))
-                        api.nvim_buf_set_option(completion_buf, 'modifiable', false)
-                    end
-                end)
-            end
-        end,
-        on_exit = function(_, code)
-            if code ~= 0 then
-                vim.schedule(function()
-                    if vim.api.nvim_win_is_valid(completion_win) then
-                        vim.api.nvim_buf_set_lines(completion_buf, 0, -1, false,
-                            {'Error getting completions'})
-                        api.nvim_buf_set_option(completion_buf, 'modifiable', false)
-                    end
-                end)
-            end
-        end
-    })
-end
 
 
 return Utils

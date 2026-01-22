@@ -8,11 +8,9 @@ local Utils = require('llm-requester.completion.utils')
 local is_completing = false
 
 local default_config = {
-    api_type = 'ollama', -- 'ollama' or 'openai'
-    ollama_model = 'llama2',
-    ollama_url = 'http://localhost:11434/api/chat',
-    openai_model = 'llama2',
-    openai_url = 'https://openrouter.ai/api/v1',
+    api_type = 'openai', -- 'openai' only
+    openai_model = 'gpt-4o-mini',
+    openai_url = 'https://api.openai.com/v1/chat/completions',
     openai_api_key = '', -- Set your OpenAI API key here or via setup()
     keys = {
         trigger = '<C-Tab>',
@@ -179,11 +177,7 @@ function Completion.show()
     api.nvim_buf_set_keymap(completion_buf, 'n', '<Esc>', '', { callback = __default })
     api.nvim_buf_set_keymap(completion_buf, 'n', config.keys.confirm, '', { callback = confirm })
 
-    if config.api_type == 'openai' then
-        Utils.handle_openai_request(completion_system_message, context, completion_buf, completion_win, config, __default)
-    else
-        Utils.handle_ollama_request(completion_system_message, context, completion_buf, completion_win, config, __default)
-    end
+    Utils.handle_openai_request(completion_system_message, context, completion_buf, completion_win, config, __default)
 end
 
 return Completion

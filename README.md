@@ -4,7 +4,7 @@ LLMRequester is a Neovim plugin that provides two main AI-powered features:
 1. **Chat Interface** - For code review, refactoring suggestions, and general assistance
 2. **Code Completion** - Context-aware intelligent code completions
 
-The plugin supports both Ollama and OpenAI API backends.
+The plugin supports OpenAI API backends.
 
 ## Installation
 
@@ -17,7 +17,7 @@ Install using your preferred Neovim package manager.
 - Send requests with `<leader>r`
 - Close windows with `<leader>q`
 - Supports both streaming and non-streaming responses
-- Works with Ollama and OpenAI APIs
+- Works with OpenAI APIs
 
 ### Code Completion
 - Trigger completions with `<C-Tab>` in insert mode
@@ -29,9 +29,7 @@ Install using your preferred Neovim package manager.
 ```lua
 require('llm-requester').setup({
     chat = {
-        api_type = 'ollama',  -- 'ollama' or 'openai'
-        ollama_model = 'llama2',
-        ollama_url = 'http://localhost:11434/api/chat',
+        api_type = 'openai',  -- 'openai' only
         openai_model = 'gpt-4o-mini',
         openai_url = 'https://api.openai.com/v1/chat/completions',
         openai_api_key = '', -- Set your OpenAI API key here
@@ -47,11 +45,9 @@ require('llm-requester').setup({
         stream = false, -- Enable streaming responses
     },
     completion = {
-        api_type = 'ollama', -- 'ollama' or 'openai'
-        ollama_model = 'llama2',
-        ollama_url = 'http://localhost:11434/api/chat',
-        openai_model = 'llama2',
-        openai_url = 'https://openrouter.ai/api/v1',
+        api_type = 'openai', -- 'openai' only
+        openai_model = 'gpt-4o-mini',
+        openai_url = 'https://api.openai.com/v1/chat/completions',
         openai_api_key = '<API_KEY>', -- Set your OpenAI API key here or via setup()
         keys = {
             trigger = '<C-Tab>',
@@ -83,10 +79,9 @@ require('llm-requester').setup({
 ## Commands
 - `:LLMRequesterChat`: Opens the chat window
 - `:LLMRequesterAgent`: Opens the agent chat window
-- `:LLMRequesterSetOllamaModel <model-name>`: Set config.ollama_model
 - `:LLMRequesterSetOpenaiModel <model-name>`: Set config.openai_model
 
 ## Requirements
 - Neovim 0.8+
 - curl (for API requests)
-- Ollama or OpenAI API access
+- OpenAI API access

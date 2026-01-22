@@ -4,11 +4,9 @@ local api = vim.api
 local fn = vim.fn
 
 Tools.default_config = {
-    api_type = 'ollama', -- 'ollama' or 'openai'
-    ollama_model = 'llama2',
-    ollama_url = 'http://localhost:11434',
-    openai_model = 'llama2',
-    openai_url = 'https://openrouter.ai/api/v1',
+    api_type = 'openai', -- 'openai' only
+    openai_model = 'gpt-4o-mini',
+    openai_url = 'https://api.openai.com/v1/chat/completions',
     openai_api_key = '', -- Set your OpenAI API key here or via setup()
 
     temperature = 0.2,
@@ -77,8 +75,7 @@ function Tools.setup(main_config)
             'uv', 'run', 'main.py',
             '--current-directory', vim.fn.getcwd(),
             '--stream', --tostring(config.stream),
-            '--model', config.api_type == "ollama" and config.ollama_model or config.openai_model,
-            '--ollama-base-url', config.ollama_url,
+            '--model', config.openai_model,
             '--openai-base-url', config.openai_url,
             '--provider', config.api_type,
             '--context-size', tostring(config.context_size),
@@ -131,12 +128,7 @@ function Tools.setup(main_config)
     vim.keymap.set('v', config.open_agent_window_key, Tools.open_agent_window, { desc = 'Test action' })
     vim.api.nvim_create_user_command('LLMRequesterChat', Tools.open_chat_window, { range = true })
     vim.api.nvim_create_user_command('LLMRequesterAgent', Tools.open_agent_window, { range = true })
-    vim.api.nvim_create_user_command('LLMRequesterSetOllamaModel', Tools.set_ollama_model, { range = true, nargs = 1 })
     vim.api.nvim_create_user_command('LLMRequesterSetOpenaiModel', Tools.set_openai_model, { range = true, nargs = 1 })
-end
-
-function Tools.set_ollama_model(attr)
-    config.ollama_model = attr.fargs[1]
 end
 
 function Tools.set_openai_model(attr)
@@ -433,8 +425,8 @@ function Tools.send_start_session(chat_type)
     local json_data = vim.json.encode({
         current_directory = vim.fn.getcwd(),
         llm_provider = config.api_type,
-        model = (config.api_type == 'openai') and config.openai_model or config.ollama_model,
-        provider_base_url = (config.api_type == 'openai') and config.openai_url or config.ollama_url,
+        model = config.openai_model,
+        provider_base_url = config.openai_url,
         api_key = config.openai_api_key,
         temperature = config.temperature,
         context_size = config.context_size,
