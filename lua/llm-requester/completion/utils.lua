@@ -3,6 +3,16 @@ local fn = vim.fn
 
 local Utils = {}
 
+-- Helper function to get API key from file
+local function get_api_key(config)
+    if config.api_key_file ~= '' then
+        local utils = require("llm-requester.utils")
+        return utils.read_api_key_from_file(config.api_key_file)
+    else
+        return ''
+    end
+end
+
 
 local function get_text_inside_tags(xml_string, tag_name)
     -- Construct the regex pattern to match text inside specific tags
@@ -34,7 +44,7 @@ function Utils.handle_openai_request(system_message, ctx, completion_buf, comple
     })
 
     local headers = {
-        'Authorization: Bearer ' .. config.openai_api_key,
+        'Authorization: Bearer ' .. get_api_key(config),
         'Content-Type: application/json'
     }
     -- store json_data to temporal file in /tmp/

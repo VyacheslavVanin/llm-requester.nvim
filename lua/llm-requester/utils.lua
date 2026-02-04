@@ -205,4 +205,21 @@ function Utils.get_first_filename_from_buffers()
     return nil
 end
 
+-- Function to read API key from file
+function Utils.read_api_key_from_file(file_path)
+    if file_path == nil or file_path == '' then
+        return nil
+    end
+
+    local file = io.open(file_path, 'r')
+    if file then
+        local api_key = file:read('*a'):gsub('%s+', '') -- Read all content and remove whitespace
+        file:close()
+        return api_key
+    else
+        vim.notify('Could not read API key file: ' .. file_path, vim.log.levels.WARN)
+        return nil
+    end
+end
+
 return Utils

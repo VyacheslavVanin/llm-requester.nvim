@@ -11,7 +11,7 @@ local config = {
         api_type = 'openai', -- 'openai' only
 
         openai_url = 'https://api.openai.com/v1/chat/completions',
-        openai_api_key = '', -- Set your OpenAI API key here or via setup()
+        api_key_file = '', -- Path to file containing the API key
         openai_model = 'gpt-4o-mini',
 
         split_ratio = 0.5,
@@ -29,6 +29,7 @@ local config = {
     },
     completion = {
         openai_model = 'gpt-4o-mini',
+        api_key_file = '', -- Path to file containing the API key
         keys = {
             trigger = '<C-Tab>',
             confirm = '<Tab>',
@@ -46,7 +47,14 @@ local ns_id = api.nvim_create_namespace('llm_requester')
 
 function M.setup(user_config)
     config = vim.tbl_extend('force', config, user_config or {})
-    Completion.setup(vim.tbl_extend('force', {url = config.url}, config.completion))
+
+    -- Ensure completion config includes api_key_file if not present
+    local completion_config = vim.deepcopy(config.completion)
+    if user_config and user_config.completion then
+        completion_config = vim.tbl_extend('force', completion_config, user_config.completion)
+    end
+
+    Completion.setup(vim.tbl_extend('force', {url = config.url}, completion_config))
 
     local chat_config = user_config.chat
     if not chat_config and not user_config.completion and next(user_config) ~= nil then

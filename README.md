@@ -32,7 +32,7 @@ require('llm-requester').setup({
         api_type = 'openai',  -- 'openai' only
         openai_model = 'gpt-4o-mini',
         openai_url = 'https://api.openai.com/v1/chat/completions',
-        openai_api_key = '', -- Set your OpenAI API key here
+        api_key_file = '', -- Path to file containing the API key
 
         split_ratio = 0.5, -- Width ratio for prompt window
         prompt_split_ratio = 0.2, -- Height ratio for prompt window
@@ -48,7 +48,7 @@ require('llm-requester').setup({
         api_type = 'openai', -- 'openai' only
         openai_model = 'gpt-4o-mini',
         openai_url = 'https://api.openai.com/v1/chat/completions',
-        openai_api_key = '<API_KEY>', -- Set your OpenAI API key here or via setup()
+        api_key_file = '', -- Path to file containing the API key
         keys = {
             trigger = '<C-Tab>',
             confirm = '<Tab>',
@@ -58,6 +58,24 @@ require('llm-requester').setup({
         menu_width = 50,
         menu_hl = 'NormalFloat',
         menu_border = 'rounded',
+    }
+})
+```
+
+## API Key Configuration
+
+The plugin now exclusively uses file-based configuration for API keys. Set `api_key_file` to the path of a file containing your API key.
+
+Example of file-based configuration:
+```lua
+require('llm-requester').setup({
+    chat = {
+        api_key_file = '/path/to/your/api-key-file.txt',
+        -- other chat options...
+    },
+    completion = {
+        api_key_file = '/path/to/your/api-key-file.txt',
+        -- other completion options...
     }
 })
 ```

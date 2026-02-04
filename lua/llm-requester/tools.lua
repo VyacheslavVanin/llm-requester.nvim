@@ -7,7 +7,7 @@ Tools.default_config = {
     api_type = 'openai', -- 'openai' only
     openai_model = 'gpt-4o-mini',
     openai_url = 'https://api.openai.com/v1/chat/completions',
-    openai_api_key = '', -- Set your OpenAI API key here or via setup()
+    api_key_file = '', -- Path to file containing the API key
 
     temperature = 0.2,
     top_k = 20,
@@ -31,6 +31,15 @@ Tools.default_config = {
 
 local utils = require("llm-requester.utils")
 local json_reconstruct = require("llm-requester.json_reconstruct")
+
+-- Helper function to get API key from file
+local function get_api_key(config)
+    if config.api_key_file ~= '' then
+        return utils.read_api_key_from_file(config.api_key_file)
+    else
+        return ''
+    end
+end
 
 local config = vim.deepcopy(Tools.default_config)
 local approve_window_shown = false
@@ -118,7 +127,7 @@ function Tools.setup(main_config)
             stdout_buffered = true,
             cwd = mcp_http_host_dir,
             env = {
-                LLM_API_KEY = (config.openai_api_key ~= '' and config.openai_api_key) or 'None',
+                LLM_API_KEY = get_api_key(config) ~= '' and get_api_key(config) or 'None',
             }
     })
 
@@ -427,7 +436,7 @@ function Tools.send_start_session(chat_type)
         llm_provider = config.api_type,
         model = config.openai_model,
         provider_base_url = config.openai_url,
-        api_key = config.openai_api_key,
+        api_key = get_api_key(config),
         temperature = config.temperature,
         context_size = config.context_size,
         stream = config.stream,
