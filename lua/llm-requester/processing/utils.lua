@@ -1,7 +1,7 @@
 local api = vim.api
 local fn = vim.fn
 
-local Utils = {}
+local ProcessingUtils = {}
 
 -- Helper function to get API key from file
 local function get_api_key(config)
@@ -24,7 +24,7 @@ local function get_text_inside_tags(xml_string, tag_name)
 end
 
 
-function Utils.handle_openai_request(system_message, ctx, completion_buf, completion_win, config, on_close_fn)
+function ProcessingUtils.handle_openai_request(system_message, ctx, result_buf, result_win, config, on_close_fn)
     local json_data = vim.json.encode({
         model = config.openai_model,
         messages = {
@@ -39,7 +39,7 @@ function Utils.handle_openai_request(system_message, ctx, completion_buf, comple
         },
         stream = false,
         temperature = 0.2,
-        max_tokens = config.context_size
+        max_tokens = 2048  -- Reasonable default for processing
     })
 
     local headers = {
@@ -47,7 +47,7 @@ function Utils.handle_openai_request(system_message, ctx, completion_buf, comple
         'Content-Type: application/json'
     }
     -- store json_data to temporal file in /tmp/
-    local temp_file = '/tmp/llm-completion-data.json'
+    local temp_file = '/tmp/llm-processing-data.json'
     fn.writefile({json_data}, temp_file)
 
     fn.jobstart({'curl', '-s', '-X', 'POST', config.openai_url .. '/chat/completions', '-H', headers[1], '-H', headers[2], '--data-binary', '@' .. temp_file}, {
@@ -56,23 +56,23 @@ function Utils.handle_openai_request(system_message, ctx, completion_buf, comple
             local ok, result = pcall(vim.json.decode, response)
             result = result.response or result
             if ok and result.choices and result.choices[1] and result.choices[1].message then
-                local suggestions = {}
-                local content = get_text_inside_tags(result.choices[1].message.content, 'completion')
-                if content == nil then
-                    on_close_fn()
-                    return
-                end
-                for line in vim.gsplit(content, '\n') do
-                    if line ~= '' then
-                        table.insert(suggestions, line)
-                    end
-                end
+                local result_text = result.choices[1].message.content
+
                 vim.schedule(function()
-                    if vim.api.nvim_win_is_valid(completion_win) then
-                        vim.api.nvim_buf_set_lines(completion_buf, 0, -1, false, suggestions)
-                        vim.api.nvim_win_set_height(completion_win,
-                            math.min(#suggestions, config.menu_height))
-                        api.nvim_buf_set_option(completion_buf, 'modifiable', false)
+                    if vim.api.nvim_win_is_valid(result_win) then
+                        -- Split the result into lines (don't expect specific tags for processing)
+                        local result_lines = {}
+                        for line in vim.gsplit(result_text, '\n') do
+                            table.insert(result_lines, line)
+                        end
+
+                        vim.api.nvim_buf_set_option(result_buf, 'modifiable', true)
+                        vim.api.nvim_buf_set_lines(result_buf, 0, -1, false, result_lines)
+
+                        -- Adjust window height based on content
+                        vim.api.nvim_win_set_height(result_win, math.min(#result_lines, config.menu_height))
+
+                        vim.api.nvim_buf_set_option(result_buf, 'modifiable', false)
                     end
                 end)
             end
@@ -80,10 +80,10 @@ function Utils.handle_openai_request(system_message, ctx, completion_buf, comple
         on_exit = function(_, code)
             if code ~= 0 then
                 vim.schedule(function()
-                    if vim.api.nvim_win_is_valid(completion_win) then
-                        vim.api.nvim_buf_set_lines(completion_buf, 0, -1, false,
-                            {'Error getting completions'})
-                        api.nvim_buf_set_option(completion_buf, 'modifiable', false)
+                    if vim.api.nvim_win_is_valid(result_win) then
+                        vim.api.nvim_buf_set_option(result_buf, 'modifiable', true)
+                        vim.api.nvim_buf_set_lines(result_buf, 0, -1, false, {'Error processing text'})
+                        vim.api.nvim_buf_set_option(result_buf, 'modifiable', false)
                     end
                 end)
             end
@@ -91,5 +91,4 @@ function Utils.handle_openai_request(system_message, ctx, completion_buf, comple
     })
 end
 
-return Utils
-
+return ProcessingUtils

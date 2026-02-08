@@ -2,6 +2,7 @@ local api = vim.api
 local fn = vim.fn
 
 local Completion = require('llm-requester.completion.completion')
+local Processing = require('llm-requester.processing.processing')
 local Tools = require("llm-requester.tools")
 
 local M = {}
@@ -55,6 +56,13 @@ function M.setup(user_config)
     end
 
     Completion.setup(vim.tbl_extend('force', {url = config.url}, completion_config))
+
+    -- Setup processing module
+    local processing_config = vim.deepcopy(config.completion) -- Use similar config as completion
+    if user_config and user_config.processing then
+        processing_config = vim.tbl_extend('force', processing_config, user_config.processing)
+    end
+    Processing.setup(processing_config)
 
     local chat_config = user_config.chat
     if not chat_config and not user_config.completion and next(user_config) ~= nil then
