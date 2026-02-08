@@ -83,6 +83,8 @@ function Completion.setup(user_config)
     local merged = vim.tbl_deep_extend('force', default_config, user_config or {})
     config = merged
     setup_completion_autocmd()
+
+    vim.api.nvim_create_user_command('LLMRequesterCompletion', Completion.show, { range = true })
 end
 
 

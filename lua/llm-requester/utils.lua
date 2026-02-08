@@ -196,7 +196,7 @@ function Utils.get_first_filename_from_buffers()
     for _, win_id in ipairs(windows) do
         local bufnr = vim.api.nvim_win_get_buf(win_id)
         local filename = vim.api.nvim_buf_get_name(bufnr)
-        if filename ~= "" and filename ~= "[No Name]" then
+        if filename ~= "" and filename ~= "[No Name]" and not string.find(filename, '%[%]') then
             return filename
         end
     end
