@@ -90,6 +90,8 @@ function Tools.setup(main_config)
             '--context-size', tostring(config.context_size),
             '--max-rps', tostring(config.max_rps),
             '--port', tostring(config.server_port),
+            '--stderr-file', '/tmp/llm-requester.err',
+            '--stdout-file', '/tmp/llm-requester.out',
         }
     if config.top_p ~= nil then
         table.insert(command, '--top_p')
@@ -138,6 +140,7 @@ function Tools.setup(main_config)
     vim.api.nvim_create_user_command('LLMRequesterChat', Tools.open_chat_window, { range = true })
     vim.api.nvim_create_user_command('LLMRequesterAgent', Tools.open_agent_window, { range = true })
     vim.api.nvim_create_user_command('LLMRequesterSetOpenaiModel', Tools.set_openai_model, { range = true, nargs = 1 })
+    vim.api.nvim_create_user_command('LLMRequesterErrorLog', Tools.show_error_log, {})
 end
 
 function Tools.set_openai_model(attr)
@@ -460,6 +463,19 @@ function Tools.send_start_session(chat_type)
         on_exit = handle_on_exit,
         stdout_buffered = true,
     })
+end
+
+Tools.show_error_log = function()
+    local error_file = "/tmp/llm-requester.err"
+    local err_file = io.open(error_file, "r")
+    if err_file then
+      local content = err_file:read("*all")
+      err_file:close()
+      print("LLMRequester Error Log:")
+      print(content)
+    else
+      print("Failed to open " .. error_file .. " for reading")
+    end
 end
 
 return Tools
