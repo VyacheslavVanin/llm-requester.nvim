@@ -8,7 +8,6 @@ local Utils = require('llm-requester.completion.utils')
 local is_completing = false
 
 local default_config = {
-    api_type = 'openai', -- 'openai' only
     openai_model = 'gpt-4o-mini',
     openai_url = 'https://api.openai.com/v1/chat/completions',
     api_key_file = '', -- Path to file containing the API key

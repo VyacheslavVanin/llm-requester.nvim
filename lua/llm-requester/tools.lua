@@ -4,7 +4,6 @@ local api = vim.api
 local fn = vim.fn
 
 Tools.default_config = {
-    api_type = 'openai', -- 'openai' only
     openai_model = 'gpt-4o-mini',
     openai_url = 'https://api.openai.com/v1/chat/completions',
     api_key_file = '', -- Path to file containing the API key
@@ -86,7 +85,6 @@ function Tools.setup(main_config)
             '--stream', --tostring(config.stream),
             '--model', config.openai_model,
             '--openai-base-url', config.openai_url,
-            '--provider', config.api_type,
             '--context-size', tostring(config.context_size),
             '--max-rps', tostring(config.max_rps),
             '--port', tostring(config.server_port),
@@ -436,7 +434,6 @@ end
 function Tools.send_start_session(chat_type)
     local json_data = vim.json.encode({
         current_directory = vim.fn.getcwd(),
-        llm_provider = config.api_type,
         model = config.openai_model,
         provider_base_url = config.openai_url,
         api_key = get_api_key(config),

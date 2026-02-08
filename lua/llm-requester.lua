@@ -9,8 +9,6 @@ local M = {}
 
 local config = {
     chat = {
-        api_type = 'openai', -- 'openai' only
-
         openai_url = 'https://api.openai.com/v1/chat/completions',
         api_key_file = '', -- Path to file containing the API key
         openai_model = 'gpt-4o-mini',

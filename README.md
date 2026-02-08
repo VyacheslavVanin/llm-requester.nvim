@@ -5,7 +5,7 @@ LLMRequester is a Neovim plugin that provides three main AI-powered features:
 2. **Code Completion** - Context-aware intelligent code completions
 3. **Text Processing** - Transform selected text based on AI-powered instructions
 
-The plugin supports OpenAI API backends.
+The plugin uses OpenAI API.
 
 ## Installation
 
@@ -18,7 +18,7 @@ Install using your preferred Neovim package manager.
 - Send requests with `<leader>r`
 - Close windows with `<leader>q`
 - Supports both streaming and non-streaming responses
-- Works with OpenAI APIs
+- Works with OpenAI API
 
 ### Code Completion
 - Trigger completions with `<C-Tab>` in insert mode
@@ -30,14 +30,13 @@ Install using your preferred Neovim package manager.
 - Enter instructions for how to transform the selected text
 - Press Enter (`<CR>`) to confirm and send the request to the LLM
 - The selected text will be replaced with the AI-generated result
-- Works with OpenAI APIs
+- Works with OpenAI API
 
 ## Configuration
 
 ```lua
 require('llm-requester').setup({
     chat = {
-        api_type = 'openai',  -- 'openai' only
         openai_model = 'gpt-4o-mini',
         openai_url = 'https://api.openai.com/v1/chat/completions',
         api_key_file = '', -- Path to file containing the API key
@@ -53,7 +52,6 @@ require('llm-requester').setup({
         stream = false, -- Enable streaming responses
     },
     completion = {
-        api_type = 'openai', -- 'openai' only
         openai_model = 'gpt-4o-mini',
         openai_url = 'https://api.openai.com/v1/chat/completions',
         api_key_file = '', -- Path to file containing the API key
@@ -68,7 +66,6 @@ require('llm-requester').setup({
         menu_border = 'rounded',
     },
     processing = {
-        api_type = 'openai', -- 'openai' only
         openai_model = 'gpt-4o-mini',
         openai_url = 'https://api.openai.com/v1/chat/completions',
         api_key_file = '', -- Path to file containing the API key
