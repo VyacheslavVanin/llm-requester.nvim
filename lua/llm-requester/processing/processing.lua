@@ -82,8 +82,8 @@ function Processing.start_process(opts)
 
     -- Set initial content to guide the user
     local user_prompt = (opts and opts.args ~= "" and {opts.args}) or {
-        'Enter your processing prompt:',
-        '(Press Enter to confirm)',
+        '',
+        '',
     }
     local prompt = user_prompt
     vim.list_extend(prompt, {'', '-- Selected text --' })
@@ -133,6 +133,9 @@ function Processing.start_process(opts)
 
     -- Enter insert mode in the prompt buffer
     vim.api.nvim_set_current_buf(processing_buf)
+    if opts.args == "" then
+        vim.cmd('startinsert')
+    end
 end
 
 function Processing.confirm_process()
