@@ -81,16 +81,7 @@ function Processing.start_process(opts)
     vim.api.nvim_buf_set_option(processing_buf, 'filetype', 'prompt')
 
     -- Set initial content to guide the user
-    local user_prompt = (opts and opts.args ~= "" and {opts.args}) or {
-        '',
-        '',
-    }
-    local prompt = user_prompt
-    vim.list_extend(prompt, {'', '-- Selected text --' })
-    -- Add each line of selected text individually
-    for _, line in ipairs(selected_text) do
-        table.insert(prompt, line)
-    end
+    local prompt = (opts and opts.args ~= "" and {opts.args}) or { '' }
     vim.api.nvim_buf_set_lines(processing_buf, 0, -1, false, prompt)
 
     -- Open a floating window for the prompt
@@ -109,6 +100,8 @@ function Processing.start_process(opts)
         border = config.menu_border,
         focusable = true,
         zindex = 100,
+        title = 'Enter your prompt:',
+        title_pos = 'center',
     })
 
     vim.api.nvim_win_set_option(processing_win, 'winhl', 'Normal:' .. config.menu_hl)
@@ -145,29 +138,7 @@ function Processing.confirm_process()
 
     -- Get the prompt from the buffer (everything before the separator line)
     local all_lines = vim.api.nvim_buf_get_lines(processing_buf, 0, -1, false)
- 
-    -- Find the separator line index
-    local separator_idx = nil
-    for i, line in ipairs(all_lines) do
-        if line == '-- Selected text --' then
-            separator_idx = i
-            break
-        end
-    end
- 
-    -- Extract prompt lines (everything before the separator)
-    local prompt_lines = {}
-    if separator_idx then
-        for i = 1, separator_idx - 1 do
-            table.insert(prompt_lines, all_lines[i])
-        end
-    else
-        -- If no separator found, use all lines
-        prompt_lines = all_lines
-    end
- 
-    -- The prompt is the concatenated prompt lines
-    local prompt = table.concat(prompt_lines, '\n'):gsub('^%s+', ''):gsub('%s+$', '') -- trim whitespace
+    local prompt = table.concat(all_lines, '\n'):gsub('^%s+', ''):gsub('%s+$', '') -- trim whitespace
  
     -- Close the prompt window
     vim.api.nvim_win_close(processing_win, true)
