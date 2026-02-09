@@ -31,6 +31,7 @@ You are an advanced AI language model designed to process and transform text bas
 The user will provide you with selected text and a prompt describing what they want you to do with that text.
 Process the selected text according to the user's instructions and return only the processed result.
 Do not add any explanations or commentary, just return the transformed text.
+The selected text is located between BEGIN_SELECTED_TEXT and END_SELECTED_TEXT tags, while instructions are between BEGIN_INSTRUCTIONS and END_INSTRUCTIONS.
 ]]
 
 function Processing.setup(user_config)
@@ -172,7 +173,7 @@ function Processing.confirm_process()
     vim.api.nvim_win_close(processing_win, true)
  
     -- Prepare the context for the API call
-    local context = 'Selected text:\n```\n' .. table.concat(selected_text, '\n') .. '\n```\n\nInstructions:\n' .. prompt
+    local context = 'BEGIN_SELECTED_TEXT\n' .. table.concat(selected_text, '\n') .. '\nEND_SELECTED_TEXT\n\nBEGIN_INSTRUCTIONS\n' .. prompt .. '\nEND_INSTRUCTIONS'
  
     -- Create a temporary buffer to show the processing result
     local result_buf = vim.api.nvim_create_buf(false, true)
