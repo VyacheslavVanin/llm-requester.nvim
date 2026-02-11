@@ -105,7 +105,9 @@ function Processing.start_process(opts)
     })
 
     vim.api.nvim_win_set_option(processing_win, 'winhl', 'Normal:' .. config.menu_hl)
-    vim.api.nvim_win_set_option(processing_win, 'winblend', 10)
+    if vim.o.termguicolors then
+        vim.api.nvim_win_set_option(processing_win, 'winblend', 10)
+    end
 
     -- Set up key mappings
     local confirm = function()
@@ -176,7 +178,9 @@ function Processing.confirm_process()
     })
 
     vim.api.nvim_win_set_option(result_win, 'winhl', 'Normal:' .. config.menu_hl)
-    vim.api.nvim_win_set_option(result_win, 'winblend', 10)
+    if vim.o.termguicolors then
+        vim.api.nvim_win_set_option(result_win, 'winblend', 10)
+    end
 
     local finish_processing = function()
         vim.api.nvim_win_close(result_win, true)

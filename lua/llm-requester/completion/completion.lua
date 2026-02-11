@@ -158,7 +158,9 @@ function Completion.show()
     )
 
     vim.api.nvim_win_set_option(completion_win, 'winhl', 'Normal:' .. config.menu_hl)
-    vim.api.nvim_win_set_option(completion_win, 'winblend', 10)
+    if vim.o.termguicolors then
+        vim.api.nvim_win_set_option(completion_win, 'winblend', 10)
+    end
 
     local confirm = function()
         local selection = api.nvim_buf_get_lines(completion_buf, 0, -1, false)
