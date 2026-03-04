@@ -25,7 +25,7 @@ end
 
 
 function ProcessingUtils.handle_openai_request(system_message, ctx, result_buf, result_win, config, on_close_fn)
-    local json_data = vim.json.encode({
+    local json_data = vim.json.encode(vim.tbl_extend('force', {
         model = config.openai_model,
         messages = {
             {
@@ -39,8 +39,8 @@ function ProcessingUtils.handle_openai_request(system_message, ctx, result_buf, 
         },
         stream = false,
         temperature = 0.2,
-        max_tokens = 2048  -- Reasonable default for processing
-    })
+        max_tokens = config.context_size
+    }, config.additional_params or {}))
 
     local headers = {
         'Authorization: Bearer ' .. get_api_key(config),
@@ -53,6 +53,9 @@ function ProcessingUtils.handle_openai_request(system_message, ctx, result_buf, 
     fn.jobstart({'curl', '-s', '-X', 'POST', config.openai_url .. '/chat/completions', '-H', headers[1], '-H', headers[2], '--data-binary', '@' .. temp_file}, {
         on_stdout = function(_, data)
             local response = table.concat(data, '')
+            -- store response to /tmp/llm-requester-processing-response.log
+            fn.writefile({response}, '/tmp/llm-requester-processing-response.log')
+
             local ok, result = pcall(vim.json.decode, response)
             result = result.response or result
             if ok and result.choices and result.choices[1] and result.choices[1].message then

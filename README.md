@@ -64,8 +64,9 @@ require('llm-requester').setup({
         menu_width = 50,
         menu_hl = 'NormalFloat',
         menu_border = 'rounded',
+        additional_params = {}, -- Additional parameters to pass to chat.completions API (e.g., {top_p = 0.9, frequency_penalty = 0})
     },
-    processing = {
+    processing = { -- Processing config can be omitted. In this case, completion config is applied
         openai_model = 'gpt-4o-mini',
         openai_url = 'https://api.openai.com/v1/chat/completions',
         api_key_file = '', -- Path to file containing the API key
@@ -77,6 +78,7 @@ require('llm-requester').setup({
         menu_width = 50,
         menu_hl = 'NormalFloat',
         menu_border = 'rounded',
+        additional_params = {}, -- Additional parameters to pass to chat.completions API (e.g., {top_p = 0.9, frequency_penalty = 0})
     }
 })
 ```

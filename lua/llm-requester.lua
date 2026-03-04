@@ -39,7 +39,8 @@ local config = {
         menu_width = 50,
         menu_hl = 'NormalFloat',
         menu_border = 'rounded',
-    }
+        additional_params = {}, -- Additional parameters to pass to chat.completions API (e.g., {top_p = 0.9, frequency_penalty = 0})
+    },
 }
 
 local ns_id = api.nvim_create_namespace('llm_requester')
@@ -52,11 +53,10 @@ function M.setup(user_config)
     if user_config and user_config.completion then
         completion_config = vim.tbl_extend('force', completion_config, user_config.completion)
     end
-
-    Completion.setup(vim.tbl_extend('force', {url = config.url}, completion_config))
+    Completion.setup(completion_config)
 
     -- Setup processing module
-    local processing_config = vim.deepcopy(config.completion) -- Use similar config as completion
+    local processing_config = vim.deepcopy(completion_config) -- Use similar config as completion
     if user_config and user_config.processing then
         processing_config = vim.tbl_extend('force', processing_config, user_config.processing)
     end

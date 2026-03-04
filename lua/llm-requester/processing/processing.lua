@@ -19,6 +19,7 @@ local default_config = {
     menu_width = 50,
     menu_hl = 'NormalFloat',
     menu_border = 'rounded',
+    additional_params = {}, -- Additional parameters to pass to chat.completions API
 }
 
 local config = default_config -- Store config

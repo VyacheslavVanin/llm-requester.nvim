@@ -25,7 +25,7 @@ end
 
 
 function Utils.handle_openai_request(system_message, ctx, completion_buf, completion_win, config, on_close_fn)
-    local json_data = vim.json.encode({
+    local json_data = vim.json.encode(vim.tbl_extend('force', {
         model = config.openai_model,
         messages = {
             {
@@ -40,7 +40,7 @@ function Utils.handle_openai_request(system_message, ctx, completion_buf, comple
         stream = false,
         temperature = 0.2,
         max_tokens = config.context_size
-    })
+    }, config.additional_params or {}))
 
     local headers = {
         'Authorization: Bearer ' .. get_api_key(config),
