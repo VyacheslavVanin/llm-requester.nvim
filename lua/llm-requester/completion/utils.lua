@@ -3,10 +3,11 @@ local fn = vim.fn
 
 local Utils = {}
 
+local utils = require("llm-requester.utils")
+
 -- Helper function to get API key from file
 local function get_api_key(config)
     if config.api_key_file ~= '' then
-        local utils = require("llm-requester.utils")
         return utils.read_api_key_from_file(config.api_key_file)
     else
         return ''
@@ -31,6 +32,10 @@ function Utils.handle_openai_request(system_message, ctx, completion_buf, comple
             {
                 role = "system",
                 content = system_message
+            },
+            {
+                role = "tool",
+                content = utils.get_extended_completion_context(3),
             },
             {
                 role = "user",

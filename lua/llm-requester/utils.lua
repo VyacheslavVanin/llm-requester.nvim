@@ -222,4 +222,83 @@ function Utils.read_api_key_from_file(file_path)
     end
 end
 
+-- Get buffer file name.
+-- If buffer is not file then return nil
+function Utils.get_buffer_filename(bufnr)
+    local filename = vim.api.nvim_buf_get_name(bufnr)
+    if filename == nil or filename == "" or not vim.fn.filereadable(filename) then
+        return nil
+    end
+    return filename
+end
+
+-- Get last N opened filenames within the current session with last cursor positions
+-- filename must be check is it realy an existing file
+function Utils.get_last_opened_buffers(n)
+    local all_buffers = vim.api.nvim_list_bufs()
+    local result = {}
+    for _, bufnr in ipairs(all_buffers) do
+        local filename = Utils.get_buffer_filename(bufnr)
+        local basename = vim.fn.fnamemodify(filename, ':t')
+        if filename and vim.fn.filereadable(filename) == 1 and not basename:match("^%.") then
+            local cursor = vim.api.nvim_buf_get_mark(bufnr, '"')
+            local size = vim.fn.getfsize(filename)
+            table.insert(result, {
+                filename = filename,
+                cursor = cursor,
+                size = size
+            })
+        end
+    end
+    -- Sort by changedtick descending to get the most recently modified/active ones
+    table.sort(result, function(a, b)
+        local a_tick = vim.api.nvim_buf_get_changedtick(vim.fn.bufnr(a.filename))
+        local b_tick = vim.api.nvim_buf_get_changedtick(vim.fn.bufnr(b.filename))
+        return a_tick > b_tick
+    end)
+    local count = math.min(n, #result)
+    return vim.list_slice(result, 1, count)
+end
+
+-- Retrieve extended completion context.
+-- Return the result as a formatted string:
+-- # Additional Context:
+-- ## User Editing This File:
+-- <current buffer file name>
+--
+-- ## User's Last Viewed Files:
+-- ### some_file_name.cpp
+-- ```<content of some_file_name.cpp>```
+--
+-- ### some_other_file_name.hpp
+-- ```<content of some_other_file_name.hpp>```
+function Utils.get_extended_completion_context(number_of_files_to_include)
+    local context_lines = {}
+    table.insert(context_lines, "# Additional context:")
+    table.insert(context_lines, "## User Editing This File:")
+
+    local current_filename = Utils.get_buffer_filename(0)
+    if current_filename then
+        table.insert(context_lines, current_filename)
+        table.insert(context_lines, "")
+    end
+    table.insert(context_lines, "## User's Last Viewed Files:")
+
+    local recent_files = Utils.get_last_opened_buffers(number_of_files_to_include)
+
+    for _, file_info in ipairs(recent_files) do
+        local filename = file_info.filename
+        if filename and filename ~= current_filename then
+            table.insert(context_lines, "### " .. filename)
+            local content = Utils.get_text(vim.fn.bufnr(filename))
+            table.insert(context_lines, "```")
+            table.insert(context_lines, content)
+            table.insert(context_lines, "```")
+            table.insert(context_lines, "")
+        end
+    end
+
+    return table.concat(context_lines, "\n")
+end
+
 return Utils
