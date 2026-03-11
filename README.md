@@ -65,6 +65,7 @@ require('llm-requester').setup({
         menu_hl = 'NormalFloat',
         menu_border = 'rounded',
         additional_params = {}, -- Additional parameters to pass to chat.completions API (e.g., {top_p = 0.9, frequency_penalty = 0})
+        extended_ctx_num_files = 3, -- Number of additional files to include in the context
     },
     processing = { -- Processing config can be omitted. In this case, completion config is applied
         openai_model = 'gpt-4o-mini',
@@ -79,6 +80,7 @@ require('llm-requester').setup({
         menu_hl = 'NormalFloat',
         menu_border = 'rounded',
         additional_params = {}, -- Additional parameters to pass to chat.completions API (e.g., {top_p = 0.9, frequency_penalty = 0})
+        extended_ctx_num_files = 3, -- Number of additional files to include in the context
     }
 })
 ```

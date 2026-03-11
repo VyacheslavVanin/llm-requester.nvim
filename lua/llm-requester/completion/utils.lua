@@ -25,23 +25,27 @@ local function get_text_inside_tags(xml_string, tag_name)
 end
 
 
-function Utils.handle_openai_request(system_message, ctx, completion_buf, completion_win, config, on_close_fn)
+function Utils.handle_openai_request(system_message, ctx, extended_ctx, completion_buf, completion_win, config, on_close_fn)
+    local messages = {
+        {
+            role = "system",
+            content = system_message,
+        },
+    }
+    if extended_ctx then
+        table.insert(messages, {
+            role = "user",
+            content = extended_ctx
+        })
+    end
+    table.insert(messages, {
+        role = "user",
+        content = ctx
+    })
+
     local json_data = vim.json.encode(vim.tbl_extend('force', {
         model = config.openai_model,
-        messages = {
-            {
-                role = "system",
-                content = system_message
-            },
-            {
-                role = "tool",
-                content = utils.get_extended_completion_context(3),
-            },
-            {
-                role = "user",
-                content = ctx
-            }
-        },
+        messages = messages,
         stream = false,
         temperature = 0.2,
         max_tokens = config.context_size

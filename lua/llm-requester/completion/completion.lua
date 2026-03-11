@@ -4,6 +4,7 @@ local fn = vim.fn
 local Completion = {}
 
 local Utils = require('llm-requester.completion.utils')
+local GlobalUtils = require('llm-requester.utils')
 
 local is_completing = false
 
@@ -22,6 +23,7 @@ local default_config = {
     menu_border = 'rounded',
     additional_params = {}, -- Additional parameters to pass to chat.completions API
     context_lines = 20,
+    extended_ctx_num_files = 3, -- Number of additional files to include in the context
 }
 
 local config = default_config -- Store config
@@ -182,7 +184,8 @@ function Completion.show()
     api.nvim_buf_set_keymap(completion_buf, 'n', '<Esc>', '', { callback = __default })
     api.nvim_buf_set_keymap(completion_buf, 'n', config.keys.confirm, '', { callback = confirm })
 
-    Utils.handle_openai_request(completion_system_message, context, completion_buf, completion_win, config, __default)
+    local extended_ctx = GlobalUtils.get_extended_completion_context(config.extended_ctx_num_files)
+    Utils.handle_openai_request(completion_system_message, context, extended_ctx, completion_buf, completion_win, config, __default)
 end
 
 return Completion

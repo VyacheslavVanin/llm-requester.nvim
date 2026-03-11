@@ -261,7 +261,8 @@ function Utils.get_last_opened_buffers(n)
 end
 
 -- Retrieve extended completion context.
--- Return the result as a formatted string:
+-- if number_of_files_to_include is nil or 0 then returns nil.
+-- Otherwise return the result as a formatted string:
 -- # Additional Context:
 -- ## User Editing This File:
 -- <current buffer file name>
@@ -273,6 +274,10 @@ end
 -- ### some_other_file_name.hpp
 -- ```<content of some_other_file_name.hpp>```
 function Utils.get_extended_completion_context(number_of_files_to_include)
+    if not number_of_files_to_include or number_of_files_to_include == 0 then
+        return nil
+    end
+
     local context_lines = {}
     table.insert(context_lines, "# Additional context:")
     table.insert(context_lines, "## User Editing This File:")

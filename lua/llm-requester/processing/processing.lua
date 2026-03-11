@@ -4,6 +4,7 @@ local fn = vim.fn
 local Processing = {}
 
 local Utils = require('llm-requester.processing.utils')
+local GlobalUtils = require('llm-requester.utils')
 
 local is_processing = false
 
@@ -20,6 +21,7 @@ local default_config = {
     menu_hl = 'NormalFloat',
     menu_border = 'rounded',
     additional_params = {}, -- Additional parameters to pass to chat.completions API
+    extended_ctx_num_files = 3, -- Number of additional files to include in the context
 }
 
 local config = default_config -- Store config
@@ -224,8 +226,9 @@ function Processing.confirm_process()
     -- Make the result window non-modifiable after setting content
     vim.api.nvim_buf_set_option(result_buf, 'modifiable', false)
 
+    local extended_ctx = GlobalUtils.get_extended_completion_context(config.extended_ctx_num_files)
     -- Call the API to process the text
-    Utils.handle_openai_request(processing_system_message, context, result_buf, result_win, config, finish_processing)
+    Utils.handle_openai_request(processing_system_message, context, extended_ctx, result_buf, result_win, config, finish_processing)
 end
 
 return Processing
