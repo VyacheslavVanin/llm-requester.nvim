@@ -1,6 +1,3 @@
-local api = vim.api
-local fn = vim.fn
-
 local ProcessingUtils = {}
 local utils = require("llm-requester.utils")
 
@@ -10,6 +7,50 @@ local function get_api_key(config)
         return utils.read_api_key_from_file(config.api_key_file)
     else
         return ''
+    end
+end
+
+local function apply_tool_use(result_text, ctx)
+    local tool_use_pattern = "BEGIN_TOOL_USE%s*(.-)%s*END_TOOL_USE"
+    local tool_use_match = string.match(result_text, tool_use_pattern)
+
+    if not tool_use_match then
+        return result_text
+    end
+
+    vim.notify("LLM tool use detected!")
+    local ok, tool_json = pcall(vim.json.decode, tool_use_match)
+    if not ok or tool_json.tool_name ~= "apply_function" then
+        return result_text
+    end
+
+    local source = tool_json.arguments.source
+    vim.notify("Applying function: " .. source)
+
+    -- Extract the selected text from ctx
+    local selected_text_pattern = "BEGIN_SELECTED_TEXT%s*(.-)%s*END_SELECTED_TEXT"
+    local selected_text = string.match(ctx, selected_text_pattern) or ""
+
+    -- Execute the Lua function
+    local func, err = load(source)
+    if not func then
+        return "Error loading Lua code: " .. tostring(err)
+    end
+
+    local ok_exec, result_val = pcall(func)
+    if not ok_exec then
+        return "Error executing Lua code: " .. tostring(result_val)
+    end
+
+    if type(result_val) == "function" then
+        local ok_call, final_result = pcall(result_val, selected_text)
+        if ok_call then
+            return tostring(final_result)
+        else
+            return "Error calling Lua function: " .. tostring(final_result)
+        end
+    else
+        return tostring(result_val)
     end
 end
 
@@ -56,18 +97,22 @@ function ProcessingUtils.handle_openai_request(system_message, ctx, extended_ctx
     }
     -- store json_data to temporal file in /tmp/
     local temp_file = '/tmp/llm-processing-data.json'
-    fn.writefile({json_data}, temp_file)
+    vim.fn.writefile({json_data}, temp_file)
 
-    fn.jobstart({'curl', '-s', '-X', 'POST', config.openai_url .. '/chat/completions', '-H', headers[1], '-H', headers[2], '--data-binary', '@' .. temp_file}, {
+    vim.fn.jobstart({'curl', '-s', '-X', 'POST', config.openai_url .. '/chat/completions', '-H', headers[1], '-H', headers[2], '--data-binary', '@' .. temp_file}, {
         on_stdout = function(_, data)
             local response = table.concat(data, '')
-            -- store response to /tmp/llm-requester-processing-response.log
-            fn.writefile({response}, '/tmp/llm-requester-processing-response.log')
+            if #response > 0 then
+                -- store response to /tmp/llm-requester-processing-response.log
+                vim.fn.writefile({response}, '/tmp/llm-requester-processing-response.log')
+            end
 
             local ok, result = pcall(vim.json.decode, response)
             result = result.response or result
             if ok and result.choices and result.choices[1] and result.choices[1].message then
                 local result_text = result.choices[1].message.content
+                
+                result_text = apply_tool_use(result_text, ctx)
 
                 vim.schedule(function()
                     if vim.api.nvim_win_is_valid(result_win) then

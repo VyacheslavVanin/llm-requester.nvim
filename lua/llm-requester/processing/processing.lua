@@ -35,6 +35,18 @@ The user will provide you with selected text and a prompt describing what they w
 Process the selected text according to the user's instructions and return only the processed result.
 Do not add any explanations or commentary, just return the transformed text.
 The selected text is located between BEGIN_SELECTED_TEXT and END_SELECTED_TEXT tags, while instructions are between BEGIN_INSTRUCTIONS and END_INSTRUCTIONS.
+
+You can also use a tool to process the text using a Lua function. To do this, respond with the following format:
+BEGIN_TOOL_USE
+{
+    "tool_name": "apply_function",
+    "arguments": {
+        "source": "local function process_text(data)\n <<HERE GOES FUNCTION BODY THAT DO WHAT USER WANTS TO DO WITH TEXT>>\n    return result\nend\nreturn process_text"
+    }
+}
+END_TOOL_USE
+
+Use the tool when you need to perform mathematical calculations on values or handle other tasks that require precision.
 ]]
 
 function Processing.setup(user_config)
