@@ -156,13 +156,20 @@ function Processing.confirm_process()
     -- Get the prompt from the buffer (everything before the separator line)
     local all_lines = vim.api.nvim_buf_get_lines(processing_buf, 0, -1, false)
     local prompt = table.concat(all_lines, '\n'):gsub('^%s+', ''):gsub('%s+$', '') -- trim whitespace
- 
+
+    -- Check for /no_extended_context tag
+    local extended_ctx = GlobalUtils.get_extended_completion_context(config.extended_ctx_num_files)
+    if prompt:find("/no_extended_context") then
+        extended_ctx = nil
+        prompt = prompt:gsub("/no_extended_context", ""):gsub("^%s+", ""):gsub("%s+$", "")
+    end
+
     -- Close the prompt window
     vim.api.nvim_win_close(processing_win, true)
- 
+
     -- Prepare the context for the API call
     local context = 'BEGIN_SELECTED_TEXT\n' .. table.concat(selected_text, '\n') .. '\nEND_SELECTED_TEXT\n\nBEGIN_INSTRUCTIONS\n' .. prompt .. '\nEND_INSTRUCTIONS'
- 
+
     -- Create a temporary buffer to show the processing result
     local result_buf = vim.api.nvim_create_buf(false, true)
     vim.api.nvim_buf_set_option(result_buf, 'buftype', 'nofile')
@@ -238,7 +245,6 @@ function Processing.confirm_process()
     -- Make the result window non-modifiable after setting content
     vim.api.nvim_buf_set_option(result_buf, 'modifiable', false)
 
-    local extended_ctx = GlobalUtils.get_extended_completion_context(config.extended_ctx_num_files)
     -- Call the API to process the text
     Utils.handle_openai_request(processing_system_message, context, extended_ctx, result_buf, result_win, config, finish_processing)
 end
