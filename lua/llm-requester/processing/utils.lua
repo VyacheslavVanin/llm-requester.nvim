@@ -100,6 +100,7 @@ function ProcessingUtils.handle_openai_request(system_message, ctx, extended_ctx
     vim.fn.writefile({json_data}, temp_file)
 
     vim.fn.jobstart({'curl', '-s', '-X', 'POST', config.openai_url .. '/chat/completions', '-H', headers[1], '-H', headers[2], '--data-binary', '@' .. temp_file}, {
+        stdout_buffered=true,
         on_stdout = function(_, data)
             local response = table.concat(data, '')
             if #response > 0 then
