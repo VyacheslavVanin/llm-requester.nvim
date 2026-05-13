@@ -96,7 +96,7 @@ function ProcessingUtils.handle_openai_request(system_message, ctx, extended_ctx
         'Content-Type: application/json'
     }
     -- store json_data to temporal file in /tmp/
-    local temp_file = '/tmp/llm-processing-data.json'
+    local temp_file = '/tmp/llm-requester-processing-request.json'
     vim.fn.writefile({json_data}, temp_file)
 
     vim.fn.jobstart({'curl', '-s', '-X', 'POST', config.openai_url .. '/chat/completions', '-H', headers[1], '-H', headers[2], '--data-binary', '@' .. temp_file}, {
@@ -104,7 +104,6 @@ function ProcessingUtils.handle_openai_request(system_message, ctx, extended_ctx
         on_stdout = function(_, data)
             local response = table.concat(data, '')
             if #response > 0 then
-                -- store response to /tmp/llm-requester-processing-response.log
                 vim.fn.writefile({response}, '/tmp/llm-requester-processing-response.log')
             end
 

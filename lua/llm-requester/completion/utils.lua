@@ -56,18 +56,23 @@ function Utils.handle_openai_request(system_message, ctx, extended_ctx, completi
         'Content-Type: application/json'
     }
     -- store json_data to temporal file in /tmp/
-    local temp_file = '/tmp/llm-completion-data.json'
+    local temp_file = '/tmp/llm-requester-completion-request.json'
     fn.writefile({json_data}, temp_file)
 
     fn.jobstart({'curl', '-s', '-X', 'POST', config.openai_url .. '/chat/completions', '-H', headers[1], '-H', headers[2], '--data-binary', '@' .. temp_file}, {
         stdout_buffered=true,
         on_stdout = function(_, data)
             local response = table.concat(data, '')
+
+            if #response > 0 then
+                fn.writefile({response}, '/tmp/llm-requester-completion-response.json')
+            end
+
             local ok, result = pcall(vim.json.decode, response)
             result = result.response or result
             if ok and result.choices and result.choices[1] and result.choices[1].message then
                 local suggestions = {}
-                local content = get_text_inside_tags(result.choices[1].message.content, 'completion')
+                local content = get_text_inside_tags(result.choices[1].message.content, 'completion') or result.choices[1].message.content
                 if content == nil then
                     on_close_fn()
                     return
