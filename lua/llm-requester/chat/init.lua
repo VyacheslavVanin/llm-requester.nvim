@@ -18,6 +18,8 @@ Chat.default_config = {
     top_p = nil,
     stream = true,
     timeout = nil,
+    connect_timeout = 15,
+    stall_timeout = nil,
     no_verify_ssl = false,
     additional_params = {},
 
@@ -26,6 +28,7 @@ Chat.default_config = {
     open_prompt_window_key = '<leader>ac',
     open_agent_window_key = '<leader>ai',
     request_keys = '<leader>r',
+    stop_keys = '<leader>cx',
     close_keys = '<leader>q',
     clear_keys = '<leader>cc',
 
@@ -46,6 +49,7 @@ local state = {
     pending = false,
     generation = 0,
     stream_text = '',
+    current_user_text = nil,
 }
 
 local function notify(message, level)
@@ -89,6 +93,7 @@ local function cancel_request()
     state.generation = state.generation + 1
     state.pending = false
     state.stream_text = ''
+    state.current_user_text = nil
 
     if state.process then
         pcall(function()
@@ -114,6 +119,7 @@ function Chat.setup(user_config)
 
     Ui.setup(config, {
         on_send = Chat.send,
+        on_stop = Chat.stop,
         on_close = Chat.close,
         on_clear = Chat.new_session,
     })
@@ -122,6 +128,7 @@ function Chat.setup(user_config)
         { 'LLMRequesterChat', Chat.open },
         { 'LLMRequesterAgent', Chat.open_agent },
         { 'LLMRequesterChatNew', Chat.new_session },
+        { 'LLMRequesterChatStop', Chat.stop },
         { 'LLMRequesterChatSessions', Chat.select_session },
     }
 
@@ -175,6 +182,49 @@ end
 
 function Chat.close()
     Ui.close()
+end
+
+function Chat.stop()
+    if not state.pending then
+        notify('no active request', vim.log.levels.WARN)
+        return
+    end
+
+    local stopped_text = state.current_user_text or ''
+    cancel_request()
+
+    local session = state.session
+    if session then
+        local expected = stopped_text ~= '' and stopped_text or nil
+        local removed = session:remove_last_user(expected)
+        if not removed then
+            removed = session:remove_last_user()
+        end
+        if stopped_text == '' and removed then
+            stopped_text = removed
+        end
+
+        if session:is_empty() then
+            local ok, err = store:delete(session.id)
+            if not ok then
+                notify('failed to delete empty session: ' .. tostring(err), vim.log.levels.WARN)
+            end
+        else
+            save_session()
+        end
+    end
+
+    Ui.set_prompt_text(stopped_text)
+
+    if Ui.is_open() then
+        if session then
+            Ui.render(session)
+        end
+        Ui.append_notice('[request stopped]')
+        Ui.focus_prompt()
+    end
+
+    notify('request stopped')
 end
 
 function Chat.new_session()
@@ -267,6 +317,7 @@ function Chat.send()
     state.generation = generation
     state.pending = true
     state.stream_text = ''
+    state.current_user_text = text
 
     Ui.append_user_message(text)
     Ui.clear_prompt()
@@ -303,6 +354,7 @@ function Chat.send()
             state.pending = false
             state.process = nil
             state.stream_text = ''
+            state.current_user_text = nil
 
             session:add_assistant(content)
             save_session()
@@ -316,6 +368,7 @@ function Chat.send()
             state.pending = false
             state.process = nil
             state.stream_text = ''
+            state.current_user_text = nil
 
             Ui.append_error(message)
             save_session()

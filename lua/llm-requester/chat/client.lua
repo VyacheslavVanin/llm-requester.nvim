@@ -99,6 +99,14 @@ local function build_payload(options, config)
     return vim.tbl_deep_extend('force', payload, config.additional_params or {})
 end
 
+local function append_seconds_option(command, flag, value)
+    local seconds = tonumber(value)
+    if seconds and seconds > 0 then
+        table.insert(command, flag)
+        table.insert(command, tostring(seconds))
+    end
+end
+
 local function build_command(config, endpoint)
     local command = {
         'curl', '-sS',
@@ -120,9 +128,15 @@ local function build_command(config, endpoint)
         table.insert(command, '--insecure')
     end
 
-    if config.timeout then
-        table.insert(command, '--max-time')
-        table.insert(command, tostring(config.timeout))
+    append_seconds_option(command, '--connect-timeout', config.connect_timeout)
+    append_seconds_option(command, '--max-time', config.timeout)
+
+    local stall_timeout = tonumber(config.stall_timeout)
+    if stall_timeout and stall_timeout > 0 then
+        table.insert(command, '--speed-limit')
+        table.insert(command, '1')
+        table.insert(command, '--speed-time')
+        table.insert(command, tostring(stall_timeout))
     end
 
     table.insert(command, '--data-binary')

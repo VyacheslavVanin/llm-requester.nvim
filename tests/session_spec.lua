@@ -49,6 +49,20 @@ do
 end
 
 do
+    local session = Session.new({ id = 'session-remove' })
+
+    session:add_user('keep me')
+    session:add_user('stop me')
+
+    Test.eq(session:remove_last_user('different text'), nil, 'mismatched content is not removed')
+    Test.eq(session:remove_last_user('stop me'), 'stop me', 'last user message is removed')
+    Test.eq(#session.messages, 1, 'only the last user message is removed')
+    Test.eq(session.messages[1].content, 'keep me', 'earlier messages are preserved')
+    Test.eq(session:remove_last_user(), 'keep me', 'remaining last user can be removed')
+    Test.eq(session:remove_last_user(), nil, 'nothing to remove after rollback')
+end
+
+do
     local session = Session.new({
         id = 'session-4',
         cwd = '/project',

@@ -4,6 +4,7 @@ local Test = _G.Test
 
 local dir = vim.fn.tempname() .. '-llm-requester-sessions'
 local store = Store.new(dir)
+local second_id = nil
 
 do
     local first = store:new_session('/project/a', 'model-a')
@@ -26,6 +27,7 @@ do
     local second = store:new_session('/project/b', 'model-b')
     second:add_user('second')
     Test.truthy((store:save(second)), 'second session save succeeds')
+    second_id = second.id
 
     local entries = store:list()
     Test.eq(#entries, 2, 'both sessions are listed')
@@ -42,6 +44,12 @@ do
     Test.eq(#entries, 2, 'broken session files are skipped')
     Test.eq(store:load('missing'), nil, 'missing session returns nil')
     Test.eq(store:load('broken'), nil, 'broken session returns nil')
+end
+
+do
+    Test.eq(store:delete(second_id), true, 'session file is deleted')
+    Test.eq(vim.fn.filereadable(store:path(second_id)), 0, 'deleted session file is gone')
+    Test.eq(store:delete('missing'), true, 'deleting a missing session is a no-op')
 end
 
 vim.fn.delete(dir, 'rf')

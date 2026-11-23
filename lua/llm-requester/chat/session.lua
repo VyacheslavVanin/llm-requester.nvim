@@ -112,6 +112,25 @@ function Session:add_usage(usage)
     self.usage = total
 end
 
+-- Removes the last user message. Used when a request is stopped before an
+-- assistant reply was produced, so the user can resend the prompt without
+-- duplicating history. Returns the removed text, or nil when there is nothing
+-- to remove.
+function Session:remove_last_user(expected_content)
+    local last = self.messages[#self.messages]
+    if not last or last.role ~= 'user' then
+        return nil
+    end
+
+    if expected_content ~= nil and last.content ~= expected_content then
+        return nil
+    end
+
+    table.remove(self.messages)
+    self:touch()
+    return last.content
+end
+
 -- Builds the message list sent to the LLM. The system prompt and the current
 -- editor context are request-scoped; the persisted history never contains them.
 function Session:build_messages(system_prompt, context)

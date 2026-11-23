@@ -118,6 +118,20 @@ function Store:latest(cwd)
     return nil
 end
 
+function Store:delete(id)
+    local path = self:path(id)
+    if vim.fn.filereadable(path) == 0 then
+        return true
+    end
+
+    local ok, err = vim.uv.fs_unlink(path)
+    if not ok then
+        return false, err
+    end
+
+    return true
+end
+
 function Store:new_session(cwd, model)
     return Session.new({
         id = generate_id(),

@@ -82,8 +82,10 @@ local function setup_keymaps()
 
     map(state.prompt_buf, 'i', '<M-CR>', handlers.on_send, 'Send LLM request')
     map(state.prompt_buf, 'n', config.request_keys, handlers.on_send, 'Send LLM request')
+    map(state.prompt_buf, 'n', config.stop_keys, handlers.on_stop, 'Stop LLM request')
     map(state.prompt_buf, 'n', config.close_keys, handlers.on_close, 'Close LLM chat')
     map(state.prompt_buf, 'n', config.clear_keys, handlers.on_clear, 'Start a new LLM chat')
+    map(state.response_buf, 'n', config.stop_keys, handlers.on_stop, 'Stop LLM request')
     map(state.response_buf, 'n', config.close_keys, handlers.on_close, 'Close LLM chat')
     map(state.response_buf, 'n', config.clear_keys, handlers.on_clear, 'Start a new LLM chat')
 end
@@ -233,6 +235,19 @@ function Ui.append_error(message)
     end
 end
 
+function Ui.append_notice(message)
+    if not is_valid_buf(state.response_buf) then
+        return
+    end
+
+    local lines = vim.split(tostring(message), '\n', { plain = true })
+    utils.append_to_buf(state.response_buf, vim.list_extend({ '' }, lines))
+
+    if is_valid_win(state.response_win) then
+        utils.scroll_window_end(state.response_win)
+    end
+end
+
 function Ui.set_usage(session)
     set_title(session)
 end
@@ -243,6 +258,27 @@ function Ui.get_prompt_text()
     end
 
     return table.concat(utils.get_content(state.prompt_buf), '\n')
+end
+
+-- Restores text into the prompt buffer. Existing draft text is preserved and
+-- the restored message is appended after a blank line.
+function Ui.set_prompt_text(text)
+    if not is_valid_buf(state.prompt_buf) or not text or text == '' then
+        return
+    end
+
+    local current = table.concat(utils.get_content(state.prompt_buf), '\n')
+    if current:match('%S') then
+        text = current .. '\n\n' .. text
+    end
+
+    local lines = vim.split(text, '\n', { plain = true })
+    utils.show_in_buf_mutable(state.prompt_buf, lines)
+
+    if is_valid_win(state.prompt_win) then
+        local last_line = lines[#lines] or ''
+        api.nvim_win_set_cursor(state.prompt_win, { #lines, #last_line })
+    end
 end
 
 function Ui.clear_prompt()

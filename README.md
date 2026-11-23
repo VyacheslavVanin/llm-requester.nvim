@@ -51,7 +51,9 @@ require('llm-requester').setup({
         temperature = 0.2,
         top_p = nil,
         stream = true,        -- Stream assistant replies token by token
-        timeout = nil,        -- Request timeout in seconds; nil means no timeout
+        timeout = nil,        -- Overall request timeout in seconds; nil means no timeout
+        connect_timeout = 15, -- Abort if the connection cannot be established
+        stall_timeout = nil,  -- Abort when the provider sends no data for N seconds
         no_verify_ssl = false,
         additional_params = {}, -- Extra fields merged into the request body
 
@@ -60,6 +62,7 @@ require('llm-requester').setup({
         open_prompt_window_key = '<leader>ac',
         open_agent_window_key = '<leader>ai',
         request_keys = '<leader>r',
+        stop_keys = '<leader>cx',
         close_keys = '<leader>q',
         clear_keys = '<leader>cc',
 
@@ -115,9 +118,20 @@ Each chat session is stored as a separate JSON file in `sessions_dir`
 - API keys are never written to session files.
 - `clear_keys` / `:LLMRequesterChatNew` starts a new session and keeps the old
   one available on disk.
+- `<leader>cx` / `:LLMRequesterChatStop` stops the current request, discards the
+  partial reply and returns the question to the prompt for editing or resending.
 - `:LLMRequesterChatSessions` lets you pick a previously saved session.
 - On startup, the latest non-empty session for the current working directory is
   loaded automatically when `continue_last_session` is enabled.
+
+### Request timeouts and stopping
+
+- `<leader>cx` / `:LLMRequesterChatStop` immediately kills the active `curl`
+  process, discards the partial reply and returns the question to the prompt.
+- `connect_timeout` (default `15`) limits connection establishment.
+- `stall_timeout` (default `nil`) aborts the request if the provider stops
+  sending data for the configured number of seconds.
+- `timeout` (default `nil`) is an overall request deadline.
 
 ## Agent Mode
 
@@ -152,6 +166,7 @@ nor `api_key_file` is configured.
 - `<leader>ac`: Open chat window
 - `<leader>ai`: Open chat window (agent mode placeholder)
 - `<leader>r` / `<M-CR>`: Send request
+- `<leader>cx`: Stop the current request (the question is returned to the prompt)
 - `<leader>q`: Close windows
 - `<leader>cc`: Start a new chat (previous history is kept on disk)
 
@@ -165,6 +180,7 @@ nor `api_key_file` is configured.
 - `:LLMRequesterChat` — Opens the chat window
 - `:LLMRequesterAgent` — Opens the chat window with an agent-mode warning
 - `:LLMRequesterChatNew` — Starts a new chat session
+- `:LLMRequesterChatStop` — Stops the current request and returns the question to the prompt
 - `:LLMRequesterChatSessions` — Selects a saved chat session
 - `:LLMRequesterProcess` — Processes selected text with AI instructions (accepts instructions as parameter)
 - `:LLMRequesterCompletion` — Shows an LLM completion at the cursor
