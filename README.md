@@ -83,7 +83,9 @@ You can inspect and modify files and run shell commands through the provided too
 Prefer reading the relevant files before changing them, and keep changes focused.
 ]],
             tool_choice = 'auto',
-            max_tool_iterations = 8,      -- request/tool rounds per user message
+            max_tool_iterations = 24,     -- request/tool rounds per user message
+            iteration_limit_step = 24,    -- extra rounds offered when the limit is hit
+            confirm_iteration_limit = nil, -- optional custom continuation prompt
             max_tool_calls_per_round = 20,
             max_file_bytes = 200000,
             max_write_bytes = 200000,
@@ -200,6 +202,11 @@ session**. Grants for paths **outside the root** and all command rules expire
 after `auto_approve_limit` uses and then prompt again. Every tool round is also
 bounded by `max_tool_iterations` / `max_tool_calls_per_round`, and commands are
 bounded by `command_timeout`, so a loop cannot hang Neovim.
+
+When `max_tool_iterations` is reached the agent asks whether to continue with
+`iteration_limit_step` more rounds or to stop. Stopping is not an error: the
+unfinished tool calls are recorded as skipped and the conversation stays usable.
+The limit is reset for every new user message.
 
 Paths are canonicalized with symlinks resolved; broken symlinks are rejected.
 A directory grant only covers real descendants (a grant for `src` never covers

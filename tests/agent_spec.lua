@@ -51,6 +51,9 @@ local function new_agent(overrides)
         confirm = function(_, _, callback)
             callback('once')
         end,
+        confirm_iteration_limit = function(_, _, callback)
+            callback('stop')
+        end,
     }, overrides or {})
 
     local session = Session.new({ id = 'agent-session', cwd = root, mode = 'agent' })
@@ -163,12 +166,50 @@ do
         { tool_calls = { call('c3', 'read_file', { path = 'file.txt' }) } },
     }
 
+    local notices = {}
     local agent, session = new_agent({ max_tool_iterations = 1 })
-    local _, failed = run(agent, {})
+    local finished, failed = run(agent, {
+        on_notice = function(message)
+            table.insert(notices, message)
+        end,
+    })
 
-    Test.truthy(failed and failed:find('iteration limit', 1, true), 'iteration limit is reported')
-    Test.eq(#requests, 1, 'iteration limit stops further requests')
-    Test.truthy(session.messages[3].content:find('iteration limit', 1, true), 'limit is stored as a tool error')
+    Test.eq(failed, nil, 'iteration limit is not reported as an error')
+    Test.eq(finished, '', 'stopping at the limit finishes the exchange')
+    Test.eq(#requests, 1, 'stopping at the limit prevents further requests')
+
+    local notice_text = table.concat(notices, '\n')
+    Test.truthy(notice_text:find('iteration limit reached', 1, true), 'limit prompt is announced')
+    Test.truthy(notice_text:find('stopped at the tool iteration limit', 1, true), 'stop reason is announced')
+    Test.truthy(session.messages[3].content:find('chose to stop', 1, true), 'limit is stored as a tool error')
+end
+
+do
+    requests = {}
+    queue = {
+        { tool_calls = { call('c7', 'read_file', { path = 'file.txt' }) } },
+        { content = 'after continue' },
+    }
+
+    local notices = {}
+    local agent, session = new_agent({
+        max_tool_iterations = 1,
+        iteration_limit_step = 2,
+        confirm_iteration_limit = function(_, _, callback)
+            callback('continue')
+        end,
+    })
+    local finished = run(agent, {
+        on_notice = function(message)
+            table.insert(notices, message)
+        end,
+    })
+
+    Test.eq(finished, 'after continue', 'agent continues after approving more rounds')
+    Test.eq(#requests, 2, 'continued agent performs the next request')
+    Test.truthy(table.concat(notices, '\n'):find('raised to 3', 1, true), 'new limit is announced')
+    Test.eq(session.messages[3].role, 'tool', 'tool is executed after continuation')
+    Test.truthy(session.messages[3].content:find('line one', 1, true), 'tool result is stored after continuation')
 end
 
 do

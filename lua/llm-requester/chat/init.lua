@@ -48,7 +48,9 @@ Prefer reading the relevant files before changing them, and keep changes focused
 Explain briefly what you are about to do, then call the tools you need.
 ]],
         tool_choice = 'auto',
-        max_tool_iterations = 8,
+        max_tool_iterations = 24,
+        iteration_limit_step = 24,
+        confirm_iteration_limit = nil,
         max_tool_calls_per_round = 20,
         max_file_bytes = 200000,
         max_write_bytes = 200000,
@@ -447,6 +449,12 @@ local function send_agent(session, generation)
                 return
             end
             Ui.append_tool_result(result)
+        end,
+        on_notice = function(message)
+            if generation ~= state.generation then
+                return
+            end
+            Ui.append_notice(message)
         end,
         on_change = function()
             if generation ~= state.generation then
