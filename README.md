@@ -3,8 +3,9 @@
 LLMRequester is a Neovim plugin that provides three main AI-powered features:
 
 1. **Chat Interface** — for code review, refactoring suggestions, and general assistance.
-2. **Code Completion** — context-aware intelligent code completions.
-3. **Text Processing** — transform selected text based on AI-powered instructions.
+2. **Agent Mode** — an assistant that can read/write files and run commands with explicit permissions.
+3. **Code Completion** — context-aware intelligent code completions.
+4. **Text Processing** — transform selected text based on AI-powered instructions.
 
 The plugin uses an OpenAI-compatible API and is implemented entirely in Lua. No Python runtime or background server is required.
 
@@ -73,6 +74,28 @@ require('llm-requester').setup({
 You are a helpful and highly skilled software developer assistant.
 You must help user with their task.
 ]],
+
+        -- Agent mode (`:LLMRequesterAgent`, `<leader>ai`)
+        agent = {
+            system_prompt = [[
+You are an autonomous software development assistant running inside Neovim.
+You can inspect and modify files and run shell commands through the provided tools.
+Prefer reading the relevant files before changing them, and keep changes focused.
+]],
+            tool_choice = 'auto',
+            max_tool_iterations = 8,      -- request/tool rounds per user message
+            max_tool_calls_per_round = 20,
+            max_file_bytes = 200000,
+            max_write_bytes = 200000,
+            max_read_lines = 2000,
+            max_tool_output_bytes = 50000,
+            max_stored_tool_output = 8000, -- tool output kept in the session file
+            max_list_entries = 500,
+            command_timeout = 60,          -- seconds
+            auto_approve_limit = 20,       -- uses before asking again (outside the root)
+            allow_read_visible_in_cwd = true,
+            confirm = nil,                 -- optional custom approval UI
+        },
     },
     completion = {
         openai_model = 'gpt-4o-mini',
@@ -113,8 +136,9 @@ You must help user with their task.
 Each chat session is stored as a separate JSON file in `sessions_dir`
 (`stdpath('cache')/llm-requester/sessions` by default).
 
-- Only user and assistant messages are stored; the system prompt and editor
-  context are added to requests at runtime.
+- Only user/assistant messages (and, in agent sessions, tool calls and their
+  results) are stored; the system prompt and editor context are added to
+  requests at runtime.
 - API keys are never written to session files.
 - `clear_keys` / `:LLMRequesterChatNew` starts a new session and keeps the old
   one available on disk.
@@ -135,8 +159,63 @@ Each chat session is stored as a separate JSON file in `sessions_dir`
 
 ## Agent Mode
 
-Agent/MCP-tool functionality is not implemented yet. `:LLMRequesterAgent` and
-`open_agent_window_key` currently open the regular chat and show a warning.
+`:LLMRequesterAgent` (`<leader>ai`) opens an agent session bound to the current
+working directory. Agent mode uses OpenAI-compatible function calling, so the
+provider must support `tools` / `tool_calls`.
+
+Every session records its mode (`chat` or `agent`) and the agent session is
+bound to its root directory. The agent cannot change that directory; relative
+tool paths are resolved against it.
+
+### Tools
+
+| Tool | Purpose |
+| --- | --- |
+| `read_file` | Read a text file with line numbers, optional `start_line` / `max_lines`. |
+| `write_file` | Create or overwrite a file. Parent directories must exist. |
+| `list_directory` | List directory entries. Hidden entries are omitted unless requested. |
+| `run_command` | Run a command with `sh -c` in the session root (timeout, captured output). |
+
+### Permissions
+
+| Operation | Default |
+| --- | --- |
+| Read a visible file inside the root | Allowed without asking |
+| Read a hidden file or a path outside the root | Confirmation required |
+| List a visible directory inside the root | Allowed without asking |
+| List hidden entries or a directory outside the root | Confirmation required |
+| Write any file | Confirmation required (unless a grant exists) |
+| Run any command | Confirmation required (unless a rule exists) |
+
+Approval prompts offer:
+
+- **Allow once** — no grant is stored.
+- **Allow this file / directory for the session** — for file operations.
+- **Allow this exact command / all commands starting with the first word** — for
+  commands, with a limited number of uses.
+- **Deny** (or pressing `Esc`).
+
+Grants for files and directories **inside the root are unlimited for the
+session**. Grants for paths **outside the root** and all command rules expire
+after `auto_approve_limit` uses and then prompt again. Every tool round is also
+bounded by `max_tool_iterations` / `max_tool_calls_per_round`, and commands are
+bounded by `command_timeout`, so a loop cannot hang Neovim.
+
+Paths are canonicalized with symlinks resolved; broken symlinks are rejected.
+A directory grant only covers real descendants (a grant for `src` never covers
+`src-other`).
+
+### Sessions and stopping
+
+- Tool calls and their results are stored in the session file, so an agent
+  conversation can be resumed after restarting Neovim.
+- Tool output stored on disk is truncated to `max_stored_tool_output`.
+- `<leader>cx` / `:LLMRequesterChatStop` kills the active request (including a
+  running command), rolls back the unfinished exchange and returns the question
+  to the prompt.
+- Agent and chat histories are separate: `:LLMRequesterAgent` restores the
+  latest agent session for the directory, while `:LLMRequesterChat` restores the
+  latest chat session.
 
 ## API Key Configuration
 
@@ -164,7 +243,7 @@ nor `api_key_file` is configured.
 ### Chat
 
 - `<leader>ac`: Open chat window
-- `<leader>ai`: Open chat window (agent mode placeholder)
+- `<leader>ai`: Open agent chat window
 - `<leader>r` / `<M-CR>`: Send request
 - `<leader>cx`: Stop the current request (the question is returned to the prompt)
 - `<leader>q`: Close windows
@@ -178,7 +257,7 @@ nor `api_key_file` is configured.
 ## Commands
 
 - `:LLMRequesterChat` — Opens the chat window
-- `:LLMRequesterAgent` — Opens the chat window with an agent-mode warning
+- `:LLMRequesterAgent` — Opens an agent chat window (files, directories, commands)
 - `:LLMRequesterChatNew` — Starts a new chat session
 - `:LLMRequesterChatStop` — Stops the current request and returns the question to the prompt
 - `:LLMRequesterChatSessions` — Selects a saved chat session

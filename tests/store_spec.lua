@@ -47,6 +47,20 @@ do
 end
 
 do
+    local agent = store:new_session('/project/a', 'model-a', 'agent')
+    agent:add_user('inspect the repository')
+    Test.truthy((store:save(agent)), 'agent session save succeeds')
+    Test.eq(agent.mode, 'agent', 'agent session mode')
+    Test.eq(agent.root, '/project/a', 'agent session root')
+
+    Test.eq(store:latest('/project/a', 'agent').id, agent.id, 'agent session is found by mode')
+    Test.eq(store:latest('/project/a', 'chat').mode, 'chat', 'chat lookup ignores agent sessions')
+    Test.eq(store:latest('/project/a', 'agent').root, '/project/a', 'agent root survives storage')
+
+    store:delete(agent.id)
+end
+
+do
     Test.eq(store:delete(second_id), true, 'session file is deleted')
     Test.eq(vim.fn.filereadable(store:path(second_id)), 0, 'deleted session file is gone')
     Test.eq(store:delete('missing'), true, 'deleting a missing session is a no-op')

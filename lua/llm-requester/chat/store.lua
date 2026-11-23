@@ -109,9 +109,12 @@ function Store:list()
     return entries
 end
 
-function Store:latest(cwd)
+function Store:latest(cwd, mode)
+    local expected_mode = mode or 'chat'
     for _, entry in ipairs(self:list()) do
-        if entry.session.cwd == cwd and not entry.session:is_empty() then
+        if entry.session.cwd == cwd
+            and entry.session.mode == expected_mode
+            and not entry.session:is_empty() then
             return entry.session
         end
     end
@@ -132,10 +135,14 @@ function Store:delete(id)
     return true
 end
 
-function Store:new_session(cwd, model)
+function Store:new_session(cwd, model, mode)
+    local root = mode == 'agent' and cwd or nil
+
     return Session.new({
         id = generate_id(),
         cwd = cwd or vim.fn.getcwd(),
+        root = root,
+        mode = mode,
         model = model or '',
     })
 end

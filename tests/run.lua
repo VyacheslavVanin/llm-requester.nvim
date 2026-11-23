@@ -8,6 +8,11 @@ local specs = {
     'tests/session_spec.lua',
     'tests/store_spec.lua',
     'tests/utils_spec.lua',
+    'tests/paths_spec.lua',
+    'tests/permissions_spec.lua',
+    'tests/tools_spec.lua',
+    'tests/protocol_spec.lua',
+    'tests/agent_spec.lua',
 }
 
 for _, spec in ipairs(specs) do

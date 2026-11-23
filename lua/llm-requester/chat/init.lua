@@ -4,6 +4,7 @@ local api = vim.api
 local utils = require('llm-requester.utils')
 local Store = require('llm-requester.chat.store')
 local Client = require('llm-requester.chat.client')
+local Agent = require('llm-requester.chat.agent')
 local Ui = require('llm-requester.chat.ui')
 
 local Chat = {}
@@ -38,6 +39,28 @@ Chat.default_config = {
 You are a helpful and highly skilled software developer assistant.
 You must help user with their task.
 ]],
+
+    agent = {
+        system_prompt = [[
+You are an autonomous software development assistant running inside Neovim.
+You can inspect and modify files and run shell commands through the provided tools.
+Prefer reading the relevant files before changing them, and keep changes focused.
+Explain briefly what you are about to do, then call the tools you need.
+]],
+        tool_choice = 'auto',
+        max_tool_iterations = 8,
+        max_tool_calls_per_round = 20,
+        max_file_bytes = 200000,
+        max_write_bytes = 200000,
+        max_read_lines = 2000,
+        max_tool_output_bytes = 50000,
+        max_stored_tool_output = 8000,
+        max_list_entries = 500,
+        command_timeout = 60,
+        auto_approve_limit = 20,
+        allow_read_visible_in_cwd = true,
+        confirm = nil,
+    },
 }
 
 local config = vim.deepcopy(Chat.default_config)
@@ -46,6 +69,7 @@ local store = nil
 local state = {
     session = nil,
     process = nil,
+    agent = nil,
     pending = false,
     generation = 0,
     stream_text = '',
@@ -70,23 +94,42 @@ local function save_session()
     return ok
 end
 
-local function ensure_session()
-    if state.session then
+local function ensure_session(mode)
+    mode = mode == 'agent' and 'agent' or 'chat'
+
+    if state.session and state.session.mode == mode then
         return state.session
     end
+
+    if state.session then
+        save_session()
+    end
+    state.agent = nil
 
     local cwd = vim.fn.getcwd()
 
     if config.continue_last_session then
-        local latest = store:latest(cwd)
+        local latest = store:latest(cwd, mode)
         if latest then
             state.session = latest
             return latest
         end
     end
 
-    state.session = store:new_session(cwd, config.openai_model)
+    state.session = store:new_session(cwd, config.openai_model, mode)
     return state.session
+end
+
+local function get_agent(session)
+    if state.agent and state.agent.session == session then
+        return state.agent
+    end
+
+    state.agent = Agent.new({
+        session = session,
+        config = config,
+    })
+    return state.agent
 end
 
 local function cancel_request()
@@ -100,6 +143,10 @@ local function cancel_request()
             state.process:kill(9)
         end)
         state.process = nil
+    end
+
+    if state.agent then
+        state.agent:cancel()
     end
 end
 
@@ -149,7 +196,7 @@ function Chat.setup(user_config)
 
     if config.open_agent_window_key and config.open_agent_window_key ~= '' then
         vim.keymap.set({ 'n', 'v' }, config.open_agent_window_key, Chat.open_agent, {
-            desc = 'LLM chat (agent mode placeholder)',
+            desc = 'LLM agent chat',
         })
     end
 
@@ -162,9 +209,18 @@ function Chat.setup(user_config)
     })
 end
 
-function Chat.open()
+local function open_mode(mode)
+    local current_mode = state.session and state.session.mode or 'chat'
+    if state.pending and current_mode ~= mode then
+        notify(
+            'a request is in progress; stop it before switching chat modes',
+            vim.log.levels.WARN
+        )
+        mode = current_mode
+    end
+
     local was_open = Ui.is_open()
-    local session = ensure_session()
+    local session = ensure_session(mode)
 
     Ui.open(session)
 
@@ -175,9 +231,12 @@ function Chat.open()
     end
 end
 
+function Chat.open()
+    open_mode('chat')
+end
+
 function Chat.open_agent()
-    notify('agent mode is not implemented yet, opening the regular chat', vim.log.levels.WARN)
-    Chat.open()
+    open_mode('agent')
 end
 
 function Chat.close()
@@ -195,11 +254,7 @@ function Chat.stop()
 
     local session = state.session
     if session then
-        local expected = stopped_text ~= '' and stopped_text or nil
-        local removed = session:remove_last_user(expected)
-        if not removed then
-            removed = session:remove_last_user()
-        end
+        local removed = session:rollback_pending_request()
         if stopped_text == '' and removed then
             stopped_text = removed
         end
@@ -228,10 +283,12 @@ function Chat.stop()
 end
 
 function Chat.new_session()
+    local mode = state.session and state.session.mode or 'chat'
     cancel_request()
 
     local was_open = Ui.is_open()
-    state.session = store:new_session(vim.fn.getcwd(), config.openai_model)
+    state.agent = nil
+    state.session = store:new_session(vim.fn.getcwd(), config.openai_model, mode)
 
     if was_open then
         Ui.render(state.session)
@@ -255,9 +312,10 @@ function Chat.select_session()
             id = entry.id,
             session = entry.session,
             label = string.format(
-                '%s  %s  [%d messages]',
+                '%s  %s  [%s, %d messages]',
                 os.date('%Y-%m-%d %H:%M', entry.session.updated_at or 0),
                 entry.session.cwd or '?',
+                entry.session.mode or 'chat',
                 #entry.session.messages
             ),
         })
@@ -285,6 +343,7 @@ function Chat.select_session()
         cancel_request()
         save_session()
 
+        state.agent = nil
         state.session = item.session
 
         if Ui.is_open() then
@@ -297,34 +356,8 @@ function Chat.select_session()
     end)
 end
 
-function Chat.send()
-    if not Ui.is_open() then
-        return
-    end
-
-    if state.pending then
-        notify('a request is already in progress', vim.log.levels.WARN)
-        return
-    end
-
-    local text = Ui.get_prompt_text()
-    if not text:match('%S') then
-        return
-    end
-
-    local session = ensure_session()
-    local generation = state.generation + 1
-    state.generation = generation
-    state.pending = true
-    state.stream_text = ''
-    state.current_user_text = text
-
-    Ui.append_user_message(text)
-    Ui.clear_prompt()
+local function send_chat(session, generation)
     Ui.start_assistant_message()
-
-    session:add_user(text)
-    save_session()
 
     local messages = session:build_messages(config.system_prompt, make_editor_context())
 
@@ -375,6 +408,116 @@ function Chat.send()
             notify(message, vim.log.levels.ERROR)
         end,
     })
+end
+
+local function send_agent(session, generation)
+    local agent = get_agent(session)
+
+    agent:send({
+        on_assistant_start = function()
+            if generation ~= state.generation then
+                return
+            end
+
+            state.stream_text = ''
+            Ui.start_assistant_message()
+        end,
+        on_delta = function(chunk)
+            if generation ~= state.generation then
+                return
+            end
+
+            state.stream_text = state.stream_text .. chunk
+            Ui.append_stream(chunk)
+        end,
+        on_usage = function(usage)
+            if generation ~= state.generation then
+                return
+            end
+            session:add_usage(usage)
+        end,
+        on_tool_start = function(call)
+            if generation ~= state.generation then
+                return
+            end
+            Ui.append_tool_call(call)
+        end,
+        on_tool_result = function(_, result)
+            if generation ~= state.generation then
+                return
+            end
+            Ui.append_tool_result(result)
+        end,
+        on_change = function()
+            if generation ~= state.generation then
+                return
+            end
+            save_session()
+        end,
+        on_finish = function()
+            if generation ~= state.generation then
+                return
+            end
+
+            state.pending = false
+            state.process = nil
+            state.stream_text = ''
+            state.current_user_text = nil
+
+            save_session()
+            Ui.set_usage(session)
+        end,
+        on_error = function(message)
+            if generation ~= state.generation then
+                return
+            end
+
+            state.pending = false
+            state.process = nil
+            state.stream_text = ''
+            state.current_user_text = nil
+
+            Ui.append_error(message)
+            save_session()
+            notify(message, vim.log.levels.ERROR)
+        end,
+    }, make_editor_context())
+end
+
+function Chat.send()
+    if not Ui.is_open() then
+        return
+    end
+
+    if state.pending then
+        notify('a request is already in progress', vim.log.levels.WARN)
+        return
+    end
+
+    local text = Ui.get_prompt_text()
+    if not text:match('%S') then
+        return
+    end
+
+    state.generation = state.generation + 1
+    local generation = state.generation
+    state.pending = true
+    state.stream_text = ''
+    state.current_user_text = text
+
+    local session = state.session or ensure_session('chat')
+
+    Ui.append_user_message(text)
+    Ui.clear_prompt()
+
+    session:add_user(text)
+    save_session()
+
+    if session.mode == 'agent' then
+        send_agent(session, generation)
+    else
+        send_chat(session, generation)
+    end
 end
 
 function Chat.set_openai_model(opts)

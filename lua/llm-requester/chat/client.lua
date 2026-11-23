@@ -2,9 +2,11 @@
 --
 -- The transport is intentionally isolated here: callbacks are always invoked
 -- outside of libuv's fast context, and streaming chunks are coalesced before
--- reaching the UI.
+-- reaching the UI. Payload construction and tool-call parsing live in
+-- llm-requester.chat.protocol so they can be tested independently.
 
 local Sse = require('llm-requester.chat.sse')
+local Protocol = require('llm-requester.chat.protocol')
 local utils = require('llm-requester.utils')
 
 local Client = {}
@@ -22,46 +24,6 @@ local function truncate(text)
     return value
 end
 
-local function extract_error(value)
-    if type(value) ~= 'table' then
-        return nil
-    end
-
-    local error_value = value.error
-    if error_value ~= nil and error_value ~= vim.NIL then
-        if type(error_value) == 'table' then
-            if type(error_value.message) == 'string' then
-                return error_value.message
-            end
-            return vim.inspect(error_value)
-        end
-        return tostring(error_value)
-    end
-
-    if type(value.message) == 'string' and value.choices == nil then
-        return value.message
-    end
-
-    return nil
-end
-
-local function extract_usage(value)
-    if type(value) ~= 'table' or type(value.usage) ~= 'table' then
-        return nil
-    end
-
-    local usage = value.usage
-    local input = tonumber(usage.prompt_tokens) or tonumber(usage.input) or 0
-    local output = tonumber(usage.completion_tokens) or tonumber(usage.output) or 0
-    local total = tonumber(usage.total_tokens) or (input + output)
-
-    return {
-        total_tokens = total,
-        input = input,
-        output = output,
-    }
-end
-
 local function get_api_key(config)
     if type(config.api_key_file) == 'string' and config.api_key_file ~= '' then
         local key = utils.read_api_key_from_file(config.api_key_file)
@@ -75,28 +37,6 @@ local function get_api_key(config)
     end
 
     return os.getenv('LLM_API_KEY')
-end
-
-local function build_payload(options, config)
-    local payload = {
-        model = config.openai_model,
-        messages = options.messages,
-        stream = config.stream and true or false,
-    }
-
-    if config.temperature ~= nil then
-        payload.temperature = config.temperature
-    end
-
-    if config.top_p ~= nil then
-        payload.top_p = config.top_p
-    end
-
-    if config.stream then
-        payload.stream_options = { include_usage = true }
-    end
-
-    return vim.tbl_deep_extend('force', payload, config.additional_params or {})
 end
 
 local function append_seconds_option(command, flag, value)
@@ -198,11 +138,13 @@ local function handle_stream_exit(options, obj, state)
         return
     end
 
-    if state.text == '' then
+    local tool_calls = state.tool_calls:list()
+
+    if state.text == '' and #tool_calls == 0 then
         local raw = table.concat(state.raw_lines, '\n'):gsub('%s+$', '')
         if raw ~= '' then
             local decoded_ok, decoded = pcall(vim.json.decode, raw)
-            local message = decoded_ok and (extract_error(decoded) or 'unexpected non-SSE response') or raw
+            local message = decoded_ok and (Protocol.extract_error(decoded) or 'unexpected non-SSE response') or raw
             emit_error(options, message, '')
             return
         end
@@ -213,7 +155,7 @@ local function handle_stream_exit(options, obj, state)
     end
 
     if options.on_finish then
-        options.on_finish(state.text)
+        options.on_finish(state.text, tool_calls, state.finish_reason)
     end
 end
 
@@ -222,13 +164,15 @@ local function start_stream(options, command, body)
         text = '',
         usage = nil,
         error = nil,
+        finish_reason = nil,
         raw_lines = {},
+        tool_calls = Protocol.new_tool_call_buffer(),
         delta = make_delta_emitter(options.on_delta),
     }
 
     local sse = Sse.new({
         on_event = function(event)
-            local event_error = extract_error(event)
+            local event_error = Protocol.extract_error(event)
             if event_error then
                 state.error = event_error
                 return
@@ -236,7 +180,7 @@ local function start_stream(options, command, body)
 
             local choices = event.choices
             if type(choices) ~= 'table' or not choices[1] then
-                local event_usage = extract_usage(event)
+                local event_usage = Protocol.extract_usage(event)
                 if event_usage then
                     state.usage = event_usage
                 end
@@ -244,9 +188,17 @@ local function start_stream(options, command, body)
             end
 
             local choice = choices[1]
+            if type(choice.finish_reason) == 'string' then
+                state.finish_reason = choice.finish_reason
+            end
+
             local delta = choice.delta
             if type(delta) ~= 'table' then
                 delta = choice.message
+            end
+
+            if type(delta) == 'table' and type(delta.tool_calls) == 'table' then
+                state.tool_calls:push(delta.tool_calls)
             end
 
             local content = type(delta) == 'table' and delta.content or nil
@@ -259,7 +211,7 @@ local function start_stream(options, command, body)
                 state.delta.push(content)
             end
 
-            local event_usage = extract_usage(event)
+            local event_usage = Protocol.extract_usage(event)
             if event_usage then
                 state.usage = event_usage
             end
@@ -293,29 +245,6 @@ local function start_stream(options, command, body)
     return process
 end
 
-local function extract_content(value)
-    if type(value) ~= 'table' or type(value.choices) ~= 'table' then
-        return nil
-    end
-
-    local choice = value.choices[1]
-    if type(choice) ~= 'table' then
-        return nil
-    end
-
-    local message = choice.message
-    local content = type(message) == 'table' and message.content or nil
-    if type(content) ~= 'string' then
-        content = choice.text
-    end
-
-    if type(content) ~= 'string' then
-        return nil
-    end
-
-    return content
-end
-
 local function start_non_stream(options, command, body)
     local started, process = pcall(vim.system, command, {
         stdin = body,
@@ -347,25 +276,27 @@ local function start_non_stream(options, command, body)
                 data = decoded.response
             end
 
-            local response_error = extract_error(data)
+            local response_error = Protocol.extract_error(data)
             if response_error then
                 emit_error(options, response_error, '')
                 return
             end
 
-            local content = extract_content(data)
-            if content == nil then
+            local content = Protocol.extract_content(data)
+            local tool_calls = Protocol.extract_tool_calls(data)
+
+            if content == nil and #tool_calls == 0 then
                 emit_error(options, 'unexpected response format: ' .. response_body, '')
                 return
             end
 
-            local usage = extract_usage(data)
+            local usage = Protocol.extract_usage(data)
             if usage and options.on_usage then
                 options.on_usage(usage)
             end
 
             if options.on_finish then
-                options.on_finish(content)
+                options.on_finish(content or '', tool_calls, Protocol.finish_reason(data))
             end
         end)
     end)
@@ -381,9 +312,11 @@ end
 ---@param options table
 ---@param options.config table
 ---@param options.messages table
+---@param options.tools table|nil OpenAI function declarations
+---@param options.tool_choice string|table|nil
 ---@param options.on_delta fun(text: string)|nil
 ---@param options.on_usage fun(usage: table)|nil
----@param options.on_finish fun(content: string)|nil
+---@param options.on_finish fun(content: string, tool_calls: table[]|nil, finish_reason: string|nil)|nil
 ---@param options.on_error fun(message: string, partial: string)|nil
 ---@return table|nil process vim.system handle, useful for cancellation
 function Client.request(options)
@@ -399,7 +332,7 @@ function Client.request(options)
         return nil
     end
 
-    local payload = build_payload(options, config)
+    local payload = Protocol.build_payload(options, config)
     local encoded_ok, body = pcall(vim.json.encode, payload)
     if not encoded_ok then
         emit_error(options, 'failed to encode request: ' .. tostring(body), '')

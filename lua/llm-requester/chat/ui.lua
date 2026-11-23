@@ -38,13 +38,18 @@ local function format_usage(usage)
     )
 end
 
+local function mode_of(session)
+    return session and session.mode == 'agent' and 'agent' or 'chat'
+end
+
 local function set_title(session)
     if not is_valid_win(state.response_win) then
         return
     end
 
     vim.wo[state.response_win].winbar = string.format(
-        ' [chat] Response %s',
+        ' [%s] Response %s',
+        mode_of(session),
         format_usage(session.usage)
     )
 end
@@ -95,14 +100,15 @@ local function set_buffer_name(buf, name)
         return
     end
 
-    if api.nvim_buf_get_name(buf) == '' then
+    local current = api.nvim_buf_get_name(buf)
+    if current == '' or current:match('%[chat%]') or current:match('%[agent%]') then
         pcall(api.nvim_buf_set_name, buf, name)
     end
 end
 
-local function set_buffer_names()
-    set_buffer_name(state.prompt_buf, '[chat] Enter your prompt')
-    set_buffer_name(state.response_buf, '[chat] Response')
+local function set_buffer_names(mode)
+    set_buffer_name(state.prompt_buf, '[' .. mode .. '] Enter your prompt')
+    set_buffer_name(state.response_buf, '[' .. mode .. '] Response')
 end
 
 local function append_user(text)
@@ -113,6 +119,38 @@ end
 local function append_assistant(text)
     local lines = vim.split(text, '\n', { plain = true })
     utils.append_to_buf(state.response_buf, vim.list_extend({ '', 'Assistant:' }, lines))
+end
+
+local function format_arguments(arguments)
+    local value = tostring(arguments or ''):gsub('%s+', ' ')
+    if #value > 300 then
+        value = value:sub(1, 300) .. '...'
+    end
+    return value
+end
+
+local function append_tool_call(call)
+    local name = type(call) == 'table' and type(call['function']) == 'table' and call['function'].name or '?'
+    local arguments = type(call) == 'table' and type(call['function']) == 'table' and call['function'].arguments or ''
+    utils.append_to_buf(state.response_buf, { '  [tool] ' .. name .. ' ' .. format_arguments(arguments) })
+end
+
+local function preview_lines(text, limit)
+    local lines = vim.split(tostring(text or ''), '\n', { plain = true })
+    local result = {}
+    for index = 1, math.min(#lines, limit) do
+        table.insert(result, '  | ' .. lines[index])
+    end
+    if #lines > limit then
+        table.insert(result, string.format('  | ... (%d more lines)', #lines - limit))
+    end
+    return result
+end
+
+local function append_tool_result(text)
+    local lines = { '  [result]' }
+    vim.list_extend(lines, preview_lines(text, 12))
+    utils.append_to_buf(state.response_buf, lines)
 end
 
 function Ui.setup(config, handlers)
@@ -147,9 +185,10 @@ function Ui.open(session)
     state.prompt_buf = new_prompt_buf
     state.response_buf = new_response_buf
 
-    vim.wo[prompt_win].winbar = ' [chat] Prompt'
+    local mode = mode_of(session)
+    vim.wo[prompt_win].winbar = string.format(' [%s] Prompt', mode)
     setup_keymaps()
-    set_buffer_names()
+    set_buffer_names(mode)
     Ui.render(session)
 end
 
@@ -175,10 +214,24 @@ function Ui.render(session)
         if message.role == 'user' then
             append_user(message.content)
         elseif message.role == 'assistant' then
-            append_assistant(message.content)
+            local has_calls = message.tool_calls and #message.tool_calls > 0
+            if message.content ~= '' then
+                append_assistant(message.content)
+            elseif has_calls then
+                utils.append_to_buf(state.response_buf, { '', 'Assistant:' })
+            end
+            for _, call in ipairs(message.tool_calls or {}) do
+                append_tool_call(call)
+            end
+        elseif message.role == 'tool' then
+            append_tool_result(message.content)
         end
     end
 
+    local mode = mode_of(session)
+    if is_valid_win(state.prompt_win) then
+        vim.wo[state.prompt_win].winbar = string.format(' [%s] Prompt', mode)
+    end
     set_title(session)
 
     if is_valid_win(state.response_win) then
@@ -229,6 +282,30 @@ function Ui.append_error(message)
 
     local lines = vim.split('[error] ' .. tostring(message), '\n', { plain = true })
     utils.append_to_buf(state.response_buf, vim.list_extend({ '' }, lines))
+
+    if is_valid_win(state.response_win) then
+        utils.scroll_window_end(state.response_win)
+    end
+end
+
+function Ui.append_tool_call(call)
+    if not is_valid_buf(state.response_buf) then
+        return
+    end
+
+    append_tool_call(call)
+
+    if is_valid_win(state.response_win) then
+        utils.scroll_window_end(state.response_win)
+    end
+end
+
+function Ui.append_tool_result(text)
+    if not is_valid_buf(state.response_buf) then
+        return
+    end
+
+    append_tool_result(text)
 
     if is_valid_win(state.response_win) then
         utils.scroll_window_end(state.response_win)

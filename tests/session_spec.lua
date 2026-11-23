@@ -63,6 +63,68 @@ do
 end
 
 do
+    local session = Session.new({ id = 'session-tools', cwd = '/project', mode = 'agent' })
+
+    session:add_user('fix the bug')
+    session:add_assistant('', {
+        { id = 'call_1', type = 'function', ['function'] = { name = 'read_file', arguments = '{"path":"a.lua"}' } },
+    })
+    session:add_tool_result('call_1', '1: return 1', 'read_file')
+    session:add_assistant('done')
+
+    Test.eq(#session.messages, 4, 'tool exchange is stored')
+    Test.eq(session.mode, 'agent', 'agent mode is stored')
+    Test.eq(session.messages[2].content, '', 'assistant tool call may have empty content')
+    Test.eq(session.messages[2].tool_calls[1].id, 'call_1', 'tool call id is stored')
+    Test.eq(session.messages[3].tool_call_id, 'call_1', 'tool result references the call')
+    Test.eq(session.messages[3].name, 'read_file', 'tool result keeps the tool name')
+
+    local restored = Session.from_table(session:to_table())
+    Test.truthy(restored, 'agent session roundtrip succeeds')
+    Test.eq(restored.mode, 'agent', 'agent mode survives roundtrip')
+    Test.eq(restored.messages, session.messages, 'tool messages survive roundtrip')
+
+    local messages = restored:build_messages('SYSTEM', nil)
+    Test.eq(messages[3].tool_calls[1]['function'].name, 'read_file', 'tool calls are sent to the LLM')
+    Test.eq(messages[4].tool_call_id, 'call_1', 'tool results are sent to the LLM')
+end
+
+do
+    local session = Session.new({ id = 'session-rollback', mode = 'agent' })
+
+    session:add_user('first')
+    session:add_assistant('first answer')
+    session:add_user('second')
+    session:add_assistant('', {
+        { id = 'call_1', type = 'function', ['function'] = { name = 'read_file', arguments = '{}' } },
+    })
+    session:add_tool_result('call_1', 'result', 'read_file')
+
+    Test.eq(session:rollback_pending_request(), 'second', 'rollback returns the stopped question')
+    Test.eq(#session.messages, 2, 'rollback removes tool calls and results of the exchange')
+    Test.eq(session.messages[2].content, 'first answer', 'earlier history is preserved')
+    Test.eq(session:rollback_pending_request(), 'first', 'rollback can remove earlier exchanges')
+    Test.eq(session:rollback_pending_request(), nil, 'rollback on empty history returns nil')
+end
+
+do
+    local session = Session.new({
+        id = 'session-tool-normalization',
+        messages = {
+            { role = 'tool', content = 'missing id' },
+            { role = 'tool', tool_call_id = 'x', content = 'ok' },
+            { role = 'assistant', content = '', tool_calls = { { id = 'a', ['function'] = { arguments = '{}' } } } },
+            { role = 'assistant', content = 'text', tool_calls = { { id = 'b', type = 'function', ['function'] = { name = 'read_file', arguments = 42 } } } },
+        },
+    })
+
+    Test.eq(#session.messages, 2, 'invalid messages are dropped')
+    Test.eq(session.messages[1].role, 'tool', 'valid tool result is kept')
+    Test.eq(session.messages[2].tool_calls[1].id, 'b', 'valid tool call is kept')
+    Test.eq(session.messages[2].tool_calls[1]['function'].arguments, '', 'non-string arguments are normalized')
+end
+
+do
     local session = Session.new({
         id = 'session-4',
         cwd = '/project',
