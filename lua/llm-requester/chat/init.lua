@@ -5,6 +5,7 @@ local utils = require('llm-requester.utils')
 local Store = require('llm-requester.chat.store')
 local Client = require('llm-requester.chat.client')
 local Agent = require('llm-requester.chat.agent')
+local Stats = require('llm-requester.chat.stats')
 local Ui = require('llm-requester.chat.ui')
 
 local Chat = {}
@@ -26,6 +27,11 @@ Chat.default_config = {
 
     split_ratio = 0.5,
     prompt_split_ratio = 0.2,
+    response_wrap = true,
+    prompt_wrap = true,
+    tool_folds = true,
+    tool_folds_closed = true,
+    show_speed = true,
     open_prompt_window_key = '<leader>ac',
     open_agent_window_key = '<leader>ai',
     request_keys = '<leader>r',
@@ -76,6 +82,7 @@ local state = {
     generation = 0,
     stream_text = '',
     current_user_text = nil,
+    stats = Stats.new(),
 }
 
 local function notify(message, level)
@@ -159,6 +166,35 @@ local function make_editor_context()
     end
 
     return '- user look at existing ' .. filename .. ' file'
+end
+
+local function start_speed(session)
+    state.stats:start()
+    Ui.set_speed(session, nil)
+end
+
+local function track_delta(session, chunk)
+    local speed = state.stats:on_delta(chunk)
+    if speed then
+        Ui.set_speed(session, speed)
+    end
+end
+
+local function track_usage(session, usage)
+    session:add_usage(usage)
+    local speed = state.stats:on_usage(usage)
+    if speed then
+        Ui.set_speed(session, speed)
+    end
+end
+
+local function finish_speed(session)
+    local speed = state.stats:finish()
+    if speed then
+        Ui.set_speed(session, speed)
+    else
+        Ui.set_usage(session)
+    end
 end
 
 function Chat.setup(user_config)
@@ -360,6 +396,7 @@ end
 
 local function send_chat(session, generation)
     Ui.start_assistant_message()
+    start_speed(session)
 
     local messages = session:build_messages(config.system_prompt, make_editor_context())
 
@@ -373,13 +410,14 @@ local function send_chat(session, generation)
 
             state.stream_text = state.stream_text .. chunk
             Ui.append_stream(chunk)
+            track_delta(session, chunk)
         end,
         on_usage = function(usage)
             if generation ~= state.generation then
                 return
             end
 
-            session:add_usage(usage)
+            track_usage(session, usage)
         end,
         on_finish = function(content)
             if generation ~= state.generation then
@@ -393,7 +431,7 @@ local function send_chat(session, generation)
 
             session:add_assistant(content)
             save_session()
-            Ui.set_usage(session)
+            finish_speed(session)
         end,
         on_error = function(message)
             if generation ~= state.generation then
@@ -422,6 +460,7 @@ local function send_agent(session, generation)
             end
 
             state.stream_text = ''
+            start_speed(session)
             Ui.start_assistant_message()
         end,
         on_delta = function(chunk)
@@ -431,12 +470,13 @@ local function send_agent(session, generation)
 
             state.stream_text = state.stream_text .. chunk
             Ui.append_stream(chunk)
+            track_delta(session, chunk)
         end,
         on_usage = function(usage)
             if generation ~= state.generation then
                 return
             end
-            session:add_usage(usage)
+            track_usage(session, usage)
         end,
         on_tool_start = function(call)
             if generation ~= state.generation then
@@ -473,7 +513,7 @@ local function send_agent(session, generation)
             state.current_user_text = nil
 
             save_session()
-            Ui.set_usage(session)
+            finish_speed(session)
         end,
         on_error = function(message)
             if generation ~= state.generation then

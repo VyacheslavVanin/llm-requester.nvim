@@ -60,6 +60,11 @@ require('llm-requester').setup({
 
         split_ratio = 0.5,
         prompt_split_ratio = 0.2,
+        response_wrap = true,       -- soft-wrap the response window
+        prompt_wrap = true,         -- soft-wrap the prompt (textwidth is always 0)
+        tool_folds = true,          -- fold tool calls in agent chats
+        tool_folds_closed = true,   -- tool blocks start collapsed
+        show_speed = true,          -- generation speed of the last reply in the winbar
         open_prompt_window_key = '<leader>ac',
         open_agent_window_key = '<leader>ai',
         request_keys = '<leader>r',
@@ -223,6 +228,16 @@ A directory grant only covers real descendants (a grant for `src` never covers
 - Agent and chat histories are separate: `:LLMRequesterAgent` restores the
   latest agent session for the directory, while `:LLMRequesterChat` restores the
   latest chat session.
+
+### Tool folds and speed
+
+- Each tool call and its output form a fold (`[tool]` / `[result]` / `[out]`
+  lines). Folds start collapsed; toggle with `za`, open all with `zR`.
+  Set `tool_folds_closed = false` to start expanded, or `tool_folds = false`
+  to disable folding.
+- The response winbar shows cumulative token usage and the generation speed of
+  the last reply: approximate characters per second while streaming and
+  `tok/s` once the provider reports usage. Set `show_speed = false` to hide it.
 
 ## API Key Configuration
 

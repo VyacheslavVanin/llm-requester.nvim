@@ -12,6 +12,8 @@ local specs = {
     'tests/permissions_spec.lua',
     'tests/tools_spec.lua',
     'tests/protocol_spec.lua',
+    'tests/stats_spec.lua',
+    'tests/ui_spec.lua',
     'tests/agent_spec.lua',
 }
 

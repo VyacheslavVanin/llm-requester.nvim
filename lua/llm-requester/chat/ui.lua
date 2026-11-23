@@ -5,6 +5,7 @@
 
 local api = vim.api
 local utils = require('llm-requester.utils')
+local Stats = require('llm-requester.chat.stats')
 
 local Ui = {}
 
@@ -15,6 +16,7 @@ local state = {
     response_win = nil,
     prompt_buf = nil,
     response_buf = nil,
+    speed = nil,
 }
 
 local function is_valid_win(win)
@@ -47,10 +49,21 @@ local function set_title(session)
         return
     end
 
+    local parts = {}
+    local usage = format_usage(session and session.usage)
+    if usage ~= '' then
+        table.insert(parts, usage)
+    end
+
+    local speed = Stats.format(state.speed)
+    if speed ~= '' and (not state.config or state.config.show_speed ~= false) then
+        table.insert(parts, '· ' .. speed)
+    end
+
     vim.wo[state.response_win].winbar = string.format(
         ' [%s] Response %s',
         mode_of(session),
-        format_usage(session.usage)
+        table.concat(parts, ' ')
     )
 end
 
@@ -64,6 +77,38 @@ local function close_stale_windows()
 
     state.prompt_win = nil
     state.response_win = nil
+end
+
+-- Window options must be re-applied on every open: scratch buffers are reused
+-- after the window is closed, so their window-local options are gone.
+local function apply_window_options()
+    local config = state.config or {}
+
+    if is_valid_buf(state.prompt_buf) then
+        utils.setup_prompt_buffer(state.prompt_buf)
+    end
+
+    if is_valid_win(state.prompt_win) then
+        vim.wo[state.prompt_win].wrap = config.prompt_wrap ~= false
+        vim.wo[state.prompt_win].linebreak = true
+    end
+
+    if is_valid_win(state.response_win) then
+        local win = state.response_win
+        vim.wo[win].wrap = config.response_wrap ~= false
+        vim.wo[win].linebreak = true
+        vim.wo[win].breakindent = true
+
+        local folds = config.tool_folds ~= false
+        vim.wo[win].foldenable = folds
+        if folds then
+            vim.wo[win].foldmethod = 'expr'
+            vim.wo[win].foldexpr = "v:lua.require'llm-requester.chat.ui'.fold_expr(v:lnum)"
+            vim.wo[win].foldtext = "v:lua.require'llm-requester.chat.ui'.fold_text()"
+            vim.wo[win].foldminlines = 1
+            vim.wo[win].foldlevel = config.tool_folds_closed ~= false and 0 or 99
+        end
+    end
 end
 
 local function setup_keymaps()
@@ -132,17 +177,20 @@ end
 local function append_tool_call(call)
     local name = type(call) == 'table' and type(call['function']) == 'table' and call['function'].name or '?'
     local arguments = type(call) == 'table' and type(call['function']) == 'table' and call['function'].arguments or ''
-    utils.append_to_buf(state.response_buf, { '  [tool] ' .. name .. ' ' .. format_arguments(arguments) })
+    utils.append_to_buf(state.response_buf, {
+        '',
+        '  [tool] ' .. name .. ' ' .. format_arguments(arguments),
+    })
 end
 
 local function preview_lines(text, limit)
     local lines = vim.split(tostring(text or ''), '\n', { plain = true })
     local result = {}
     for index = 1, math.min(#lines, limit) do
-        table.insert(result, '  | ' .. lines[index])
+        table.insert(result, '  [out] ' .. lines[index])
     end
     if #lines > limit then
-        table.insert(result, string.format('  | ... (%d more lines)', #lines - limit))
+        table.insert(result, string.format('  [out] ... (%d more lines)', #lines - limit))
     end
     return result
 end
@@ -151,6 +199,33 @@ local function append_tool_result(text)
     local lines = { '  [result]' }
     vim.list_extend(lines, preview_lines(text, 12))
     utils.append_to_buf(state.response_buf, lines)
+end
+
+---Fold expression for tool blocks. A blank line separates consecutive blocks.
+function Ui.fold_expr(lnum)
+    local line = vim.fn.getline(lnum)
+    if line:match('^%s*%[tool%]')
+        or line:match('^%s*%[result%]')
+        or line:match('^%s*%[out%]') then
+        return 1
+    end
+    return 0
+end
+
+---Compact text for a collapsed tool block.
+function Ui.fold_text()
+    local start_line = tonumber(vim.v.foldstart) or 1
+    local end_line = tonumber(vim.v.foldend) or start_line
+    local line = (vim.fn.getline(start_line) or ''):gsub('^%s+', '')
+    if #line > 120 then
+        line = line:sub(1, 120) .. '...'
+    end
+
+    local hidden = math.max(0, end_line - start_line)
+    if hidden > 0 then
+        return string.format('%s  (+%d lines)', line, hidden)
+    end
+    return line
 end
 
 function Ui.setup(config, handlers)
@@ -164,6 +239,7 @@ end
 
 function Ui.open(session)
     if Ui.is_open() then
+        apply_window_options()
         Ui.focus_prompt()
         return
     end
@@ -184,6 +260,9 @@ function Ui.open(session)
     state.response_win = response_win
     state.prompt_buf = new_prompt_buf
     state.response_buf = new_response_buf
+    state.speed = nil
+
+    apply_window_options()
 
     local mode = mode_of(session)
     vim.wo[prompt_win].winbar = string.format(' [%s] Prompt', mode)
@@ -208,7 +287,17 @@ function Ui.render(session)
         return
     end
 
+    state.speed = nil
     utils.show_in_buf(state.response_buf, {})
+
+    local results_by_id = {}
+    for _, message in ipairs(session.messages or {}) do
+        if message.role == 'tool' and type(message.tool_call_id) == 'string' then
+            results_by_id[message.tool_call_id] = message
+        end
+    end
+
+    local rendered_results = {}
 
     for _, message in ipairs(session.messages or {}) do
         if message.role == 'user' then
@@ -220,11 +309,21 @@ function Ui.render(session)
             elseif has_calls then
                 utils.append_to_buf(state.response_buf, { '', 'Assistant:' })
             end
+
             for _, call in ipairs(message.tool_calls or {}) do
                 append_tool_call(call)
+
+                local result = results_by_id[call.id]
+                if result and not rendered_results[call.id] then
+                    append_tool_result(result.content)
+                    rendered_results[call.id] = true
+                end
             end
         elseif message.role == 'tool' then
-            append_tool_result(message.content)
+            if not rendered_results[message.tool_call_id] then
+                append_tool_result(message.content)
+                rendered_results[message.tool_call_id] = true
+            end
         end
     end
 
@@ -327,6 +426,17 @@ end
 
 function Ui.set_usage(session)
     set_title(session)
+end
+
+---Updates the speed shown in the response winbar.
+function Ui.set_speed(session, speed)
+    state.speed = speed
+    set_title(session)
+end
+
+---Window ids of the open chat (prompt, response). Used by integration tests.
+function Ui.windows()
+    return state.prompt_win, state.response_win
 end
 
 function Ui.get_prompt_text()

@@ -103,10 +103,43 @@ function Utils.create_chat_split(hsplit_ratio, vsplit_ratio,
     return prompt_win, prompt_buf, response_win, response_buf
 end
 
+-- Prompt buffers must never hard-wrap input: long messages stay on one line
+-- and only the visual wrap option decides how they are displayed.
+function Utils.setup_prompt_buffer(buf)
+    if not buf or not api.nvim_buf_is_valid(buf) then
+        return
+    end
+
+    api.nvim_buf_set_option(buf, 'textwidth', 0)
+    api.nvim_buf_set_option(buf, 'wrapmargin', 0)
+
+    local formatoptions = api.nvim_buf_get_option(buf, 'formatoptions') or ''
+    local cleaned = formatoptions:gsub('t', ''):gsub('c', '')
+    api.nvim_buf_set_option(buf, 'formatoptions', cleaned)
+end
+
 function Utils.scroll_window_end(win_id)
     local buf = api.nvim_win_get_buf(win_id)
     local lines = api.nvim_buf_line_count(buf)
-    api.nvim_win_set_cursor(win_id, {lines, 0})
+    local target = lines
+
+    -- Do not jump into a closed fold: Neovim would open it. Place the cursor
+    -- on the fold start instead so tool blocks stay collapsed.
+    if vim.wo[win_id].foldenable then
+        local guard = 0
+        while target > 1 and guard < lines do
+            local fold_start = api.nvim_win_call(win_id, function()
+                return vim.fn.foldclosed(target)
+            end)
+            if fold_start == -1 or fold_start == target then
+                break
+            end
+            target = fold_start
+            guard = guard + 1
+        end
+    end
+
+    api.nvim_win_set_cursor(win_id, { target, 0 })
 end
 
 function Utils.get_first_filename_from_buffers()
