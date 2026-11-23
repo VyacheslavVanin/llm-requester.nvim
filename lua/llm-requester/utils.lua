@@ -42,62 +42,10 @@ end
 function Utils.append_to_last_line(bufnr, text)
     local last_line = vim.api.nvim_buf_line_count(bufnr) - 1  -- lines are 0-indexed
     local current_content = vim.api.nvim_buf_get_lines(bufnr, last_line, last_line + 1, false)[1] or ""
-    local inserted_text = vim.split(text, '\n', {})
+    local inserted_text = vim.split(text, '\n', { plain = true })
     inserted_text[1] = current_content .. inserted_text[1]
     vim.api.nvim_buf_set_lines(bufnr, last_line, last_line + 1, false, inserted_text)
 end
-
--- Shows modal window with choices.
--- text - window caption explainig question
--- map - key-action mapping like { y = on_yes, n = on_no}
-function Utils.show_choose_window(text, map)
-    -- Create a buffer for the modal dialog
-    local content = vim.split(text, '\n')
-    local bufnr = vim.api.nvim_create_buf(false, true)
-    local win_width = vim.o.columns
-    local win_height = vim.o.lines
-    local width = math.floor(win_width * 0.9)
-    local height = #content
-
-    -- Create a floating window with the modal dialog content
-    local float_win = vim.api.nvim_open_win(bufnr, true, {
-        width = width,
-        height = height,
-        border = 'single',
-        relative = 'editor',
-        row = vim.fn.min({
-            math.floor((win_height - height) / 2),
-            math.floor(win_height / 10)
-        }),
-        col = (win_width - width) / 2
-    })
-    api.nvim_win_set_option(float_win, 'number', false)
-    api.nvim_win_set_option(float_win, 'relativenumber', false)
-    api.nvim_win_set_option(float_win, 'wrap', true)
-    -- Set the buffer content
-    Utils.show_in_buf(bufnr, content)
-
-    for k, v in pairs(map) do
-        local function close_window_wrapper()
-            v()
-            vim.api.nvim_win_close(float_win, true)
-        end
-        vim.api.nvim_buf_set_keymap(
-            bufnr, '', k, '',
-            {
-                callback = close_window_wrapper,
-                noremap = true,
-                silent = true
-            }
-        )
-    end
-
-    -- Focus the floating window
-    vim.api.nvim_set_current_win(float_win)
-    vim.cmd('stopinsert')
-end
-
-
 
 -- Helper function to set up buffer/window options
 local function setup_buffer(win, buf, filetype, modifiable)
@@ -146,7 +94,7 @@ function Utils.create_chat_split(hsplit_ratio, vsplit_ratio,
     -- Set dimensions based on ratios
     local prompt_width = math.floor(total_width * hsplit_ratio)
     local prompt_height = math.floor(total_height * vsplit_ratio)
-    
+
     api.nvim_win_set_width(prompt_win, prompt_width)
     api.nvim_win_set_height(prompt_win, prompt_height)
     api.nvim_win_set_height(response_win, total_height - prompt_height)
@@ -161,30 +109,6 @@ function Utils.scroll_window_end(win_id)
     api.nvim_win_set_cursor(win_id, {lines, 0})
 end
 
-function Utils.is_subdirectory(path, parent)
-    -- Check if path contains '..'
-    if string.find(path, '%.%.') then
-        return false
-    end
-
-    -- Allow tools for subdirectories
-    if string.sub(path, 1, 1) ~= '/' then
-        return true
-    end
-
-    -- Ensure both paths start with '/'
-    if not (string.sub(path, 1, 1) == '/' and string.sub(parent, 1, 1) == '/') then
-        return false
-    end
-
-    -- Check if path starts with parent
-    if string.sub(path, 1, #parent) == parent then
-        return true
-    else
-        return false
-    end
-end
-
 function Utils.get_first_filename_from_buffers()
     -- Get the current tab page number
     local tabnr = vim.api.nvim_get_current_tabpage()
@@ -192,11 +116,11 @@ function Utils.get_first_filename_from_buffers()
     -- Get the list of buffers in the current tab page
     local windows = vim.api.nvim_tabpage_list_wins(tabnr)
 
-    -- Iterate through the buffers and find the first one with a valid filename
+    -- Iterate through the buffers and find the first real file
     for _, win_id in ipairs(windows) do
         local bufnr = vim.api.nvim_win_get_buf(win_id)
         local filename = vim.api.nvim_buf_get_name(bufnr)
-        if filename ~= "" and filename ~= "[No Name]" and not string.find(filename, '%[%]') then
+        if filename ~= "" and vim.fn.filereadable(filename) == 1 then
             return filename
         end
     end
@@ -220,6 +144,21 @@ function Utils.read_api_key_from_file(file_path)
         vim.notify('Could not read API key file: ' .. file_path, vim.log.levels.WARN)
         return nil
     end
+end
+
+-- Returns a full chat-completions endpoint. Accepts both a base URL
+-- (https://api.openai.com/v1) and an already complete URL.
+function Utils.completions_url(base_url)
+    if base_url == nil or base_url == '' then
+        return ''
+    end
+
+    local url = tostring(base_url):gsub('/+$', '')
+    if url:match('/chat/completions$') then
+        return url
+    end
+
+    return url .. '/chat/completions'
 end
 
 -- Get buffer file name.

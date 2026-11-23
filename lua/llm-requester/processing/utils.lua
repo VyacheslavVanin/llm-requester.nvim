@@ -99,7 +99,7 @@ function ProcessingUtils.handle_openai_request(system_message, ctx, extended_ctx
     local temp_file = '/tmp/llm-requester-processing-request.json'
     vim.fn.writefile({json_data}, temp_file)
 
-    vim.fn.jobstart({'curl', '-s', '-X', 'POST', config.openai_url .. '/chat/completions', '-H', headers[1], '-H', headers[2], '--data-binary', '@' .. temp_file}, {
+    vim.fn.jobstart({'curl', '-s', '-X', 'POST', utils.completions_url(config.openai_url), '-H', headers[1], '-H', headers[2], '--data-binary', '@' .. temp_file}, {
         stdout_buffered=true,
         on_stdout = function(_, data)
             local response = table.concat(data, '')

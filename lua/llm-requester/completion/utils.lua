@@ -59,7 +59,7 @@ function Utils.handle_openai_request(system_message, ctx, extended_ctx, completi
     local temp_file = '/tmp/llm-requester-completion-request.json'
     fn.writefile({json_data}, temp_file)
 
-    fn.jobstart({'curl', '-s', '-X', 'POST', config.openai_url .. '/chat/completions', '-H', headers[1], '-H', headers[2], '--data-binary', '@' .. temp_file}, {
+    fn.jobstart({'curl', '-s', '-X', 'POST', utils.completions_url(config.openai_url), '-H', headers[1], '-H', headers[2], '--data-binary', '@' .. temp_file}, {
         stdout_buffered=true,
         on_stdout = function(_, data)
             local response = table.concat(data, '')
