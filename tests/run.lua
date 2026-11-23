@@ -13,6 +13,8 @@ local specs = {
     'tests/tools_spec.lua',
     'tests/protocol_spec.lua',
     'tests/stats_spec.lua',
+    'tests/processing_history_spec.lua',
+    'tests/processing_cycle_spec.lua',
     'tests/ui_spec.lua',
     'tests/agent_spec.lua',
 }

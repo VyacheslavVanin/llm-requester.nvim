@@ -4,6 +4,7 @@ local fn = vim.fn
 local Processing = {}
 
 local Utils = require('llm-requester.processing.utils')
+local History = require('llm-requester.processing.history')
 local GlobalUtils = require('llm-requester.utils')
 
 local is_processing = false
@@ -14,6 +15,8 @@ local default_config = {
     api_key_file = '', -- Path to file containing the API key
     keys = {
         confirm = '<CR>', -- Enter key to confirm
+        history_prev = '<C-p>',
+        history_next = '<C-n>',
     },
     context_size = 16384, -- maximum context size in tokens
     menu_height = 10,
@@ -22,12 +25,24 @@ local default_config = {
     menu_border = 'rounded',
     additional_params = {}, -- Additional parameters to pass to chat.completions API
     extended_ctx_num_files = 3, -- Number of additional files to include in the context
+    history_file = vim.fn.stdpath('cache') .. '/llm-requester/processing_history.json',
+    history_size = 50,
 }
 
 local config = default_config -- Store config
 local processing_win, processing_buf
 local selected_text = {}
 local selection_range = {} -- Store the selection range [start_line, end_line]
+
+local history = nil
+local prompt_history = {}
+local history_index = 0
+local history_draft = { '' }
+local prompt_title = 'Enter your prompt:'
+
+local function notify(message, level)
+    vim.notify('llm-requester: ' .. message, level or vim.log.levels.INFO)
+end
 
 local processing_system_message = [[
 You are an advanced AI language model designed to process and transform text based on user instructions.
@@ -53,9 +68,17 @@ function Processing.setup(user_config)
     -- Merge user config with defaults, preserving nested structure
     local merged = vim.tbl_deep_extend('force', default_config, user_config or {})
     config = merged
+    config.history_file = vim.fn.expand(config.history_file or '')
 
-    vim.api.nvim_create_user_command('LLMRequesterProcess', Processing.start_process, { range = true, nargs = '?' })
-    vim.api.nvim_create_user_command('LLMRequesterProcessConfirm', Processing.confirm_process, {})
+    history = History.new({
+        path = config.history_file,
+        limit = config.history_size,
+    })
+
+    vim.api.nvim_create_user_command('LLMRequesterProcess', Processing.start_process, { range = true, nargs = '?', force = true })
+    vim.api.nvim_create_user_command('LLMRequesterProcessConfirm', Processing.confirm_process, { force = true })
+    vim.api.nvim_create_user_command('LLMRequesterProcessHistoryPrev', Processing.history_prev, { force = true })
+    vim.api.nvim_create_user_command('LLMRequesterProcessHistoryNext', Processing.history_next, { force = true })
 end
 
 -- Get the selected text based on the range provided by the user command
@@ -70,11 +93,113 @@ function Processing.get_selected_text(start_line, end_line)
     return lines
 end
 
+local function update_prompt_title()
+    if not processing_win or not api.nvim_win_is_valid(processing_win) then
+        return
+    end
+
+    local title = prompt_title
+    if history_index > 0 then
+        title = string.format('%s [%d/%d]', prompt_title, history_index, #prompt_history)
+    end
+
+    pcall(api.nvim_win_set_config, processing_win, {
+        title = title,
+        title_pos = 'center',
+    })
+end
+
+local function show_history(index)
+    local lines
+    if index <= 0 then
+        history_index = 0
+        lines = vim.deepcopy(history_draft)
+        if #lines == 0 then
+            lines = { '' }
+        end
+    else
+        history_index = index
+        lines = vim.split(prompt_history[index], '\n', { plain = true })
+    end
+
+    vim.api.nvim_buf_set_lines(processing_buf, 0, -1, false, lines)
+
+    if processing_win and api.nvim_win_is_valid(processing_win) then
+        local last_line = #lines
+        api.nvim_win_set_cursor(processing_win, { last_line, #(lines[last_line] or '') })
+    end
+
+    update_prompt_title()
+end
+
+local function cycle_history(direction)
+    if not is_processing then
+        return
+    end
+    if not processing_buf or not api.nvim_buf_is_valid(processing_buf) then
+        return
+    end
+    if #prompt_history == 0 then
+        notify('processing prompt history is empty')
+        return
+    end
+
+    if history_index == 0 then
+        history_draft = api.nvim_buf_get_lines(processing_buf, 0, -1, false)
+    end
+
+    local next_index = History.cycle_index(history_index, #prompt_history, direction)
+    show_history(next_index)
+end
+
+---Shows the previous (older) processing prompt.
+function Processing.history_prev()
+    cycle_history('older')
+end
+
+---Shows the next (newer) processing prompt.
+function Processing.history_next()
+    cycle_history('newer')
+end
+
+---Closes the processing prompt without applying anything.
+function Processing.cancel()
+    if processing_win and api.nvim_win_is_valid(processing_win) then
+        api.nvim_win_close(processing_win, true)
+    end
+    is_processing = false
+end
+
+local function set_history_keymaps()
+    local keys = config.keys or {}
+
+    local function map(lhs, direction, description)
+        if type(lhs) ~= 'string' or lhs == '' then
+            return
+        end
+        for _, mode in ipairs({ 'i', 'n' }) do
+            api.nvim_buf_set_keymap(processing_buf, mode, lhs, '', {
+                callback = function()
+                    cycle_history(direction)
+                end,
+                noremap = true,
+                silent = true,
+                desc = description,
+            })
+        end
+    end
+
+    map(keys.history_prev, 'older', 'Previous processing prompt')
+    map(keys.history_next, 'newer', 'Next processing prompt')
+end
+
 function Processing.start_process(opts)
     if is_processing then
         return
     end
     is_processing = true
+
+    local args = (opts and opts.args) or ''
 
     -- Get the selected text using the visual selection range
     local start_pos = vim.fn.getpos("'<")
@@ -86,7 +211,18 @@ function Processing.start_process(opts)
     selection_range = {start_line, end_line}
  
     selected_text = Processing.get_selected_text(start_line, end_line)
- 
+
+    if history then
+        local _, load_err = history:load()
+        if load_err then
+            notify('failed to load processing prompt history: ' .. load_err, vim.log.levels.WARN)
+        end
+        prompt_history = history:entries()
+    else
+        prompt_history = {}
+    end
+    history_index = 0
+
     -- Create a buffer for the prompt input
     processing_buf = vim.api.nvim_create_buf(false, true)
     vim.api.nvim_buf_set_option(processing_buf, 'buftype', 'nofile')
@@ -96,7 +232,8 @@ function Processing.start_process(opts)
     vim.api.nvim_buf_set_option(processing_buf, 'filetype', 'prompt')
 
     -- Set initial content to guide the user
-    local prompt = (opts and opts.args ~= "" and {opts.args}) or { '' }
+    local prompt = args ~= '' and { args } or { '' }
+    history_draft = vim.deepcopy(prompt)
     vim.api.nvim_buf_set_lines(processing_buf, 0, -1, false, prompt)
 
     -- Open a floating window for the prompt
@@ -130,8 +267,7 @@ function Processing.start_process(opts)
     end
  
     local cancel = function()
-        vim.api.nvim_win_close(processing_win, true)
-        is_processing = false
+        Processing.cancel()
     end
 
     -- Clear existing mappings if they exist and set new ones
@@ -140,10 +276,12 @@ function Processing.start_process(opts)
  
     vim.api.nvim_buf_set_keymap(processing_buf, 'n', '<CR>', '', { callback = confirm, noremap = true })
     vim.api.nvim_buf_set_keymap(processing_buf, 'n', '<Esc>', '', { callback = cancel, noremap = true })
+    set_history_keymaps()
+    update_prompt_title()
 
     -- Enter insert mode in the prompt buffer
     vim.api.nvim_set_current_buf(processing_buf)
-    if opts.args == "" then
+    if args == '' then
         vim.cmd('startinsert')
     end
 end
@@ -156,12 +294,20 @@ function Processing.confirm_process()
     -- Get the prompt from the buffer (everything before the separator line)
     local all_lines = vim.api.nvim_buf_get_lines(processing_buf, 0, -1, false)
     local prompt = table.concat(all_lines, '\n'):gsub('^%s+', ''):gsub('%s+$', '') -- trim whitespace
+    local history_prompt = prompt
 
     -- Check for /no_extended_context tag
     local extended_ctx = GlobalUtils.get_extended_completion_context(config.extended_ctx_num_files)
     if prompt:find("/no_extended_context") then
         extended_ctx = nil
         prompt = prompt:gsub("/no_extended_context", ""):gsub("^%s+", ""):gsub("%s+$", "")
+    end
+
+    if history and history_prompt ~= '' then
+        local saved, save_err = history:add(history_prompt)
+        if not saved then
+            notify('failed to save processing prompt history: ' .. tostring(save_err), vim.log.levels.WARN)
+        end
     end
 
     -- Close the prompt window

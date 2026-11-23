@@ -37,6 +37,9 @@ Install using your preferred Neovim package manager.
 - Enter instructions for how to transform the selected text.
 - Press Enter (`<CR>`) to confirm and send the request to the LLM.
 - The selected text will be replaced with the AI-generated result.
+- Submitted instructions are remembered globally; press `<C-p>` / `<C-n>` in the prompt window to cycle through previous prompts. The current draft is restored when cycling past the newest prompt.
+- The history is stored in `processing.history_file` (newest first, de-duplicated, limited by `processing.history_size`). Reusing a prompt moves it back to the top.
+- History keys can be remapped through `processing.keys.history_prev` / `history_next`, or bound to the commands `:LLMRequesterProcessHistoryPrev` / `:LLMRequesterProcessHistoryNext`.
 
 ## Configuration
 
@@ -126,6 +129,8 @@ Prefer reading the relevant files before changing them, and keep changes focused
         api_key_file = '', -- Path to file containing the API key
         keys = {
             confirm = '<CR>',
+            history_prev = '<C-p>', -- show an older remembered prompt
+            history_next = '<C-n>', -- show a newer prompt / return to the draft
         },
         context_size = 16384,
         menu_height = 10,
@@ -134,6 +139,8 @@ Prefer reading the relevant files before changing them, and keep changes focused
         menu_border = 'rounded',
         additional_params = {},
         extended_ctx_num_files = 3,
+        history_file = vim.fn.stdpath('cache') .. '/llm-requester/processing_history.json',
+        history_size = 50,
     },
 })
 ```
@@ -284,6 +291,8 @@ nor `api_key_file` is configured.
 - `:LLMRequesterChatStop` — Stops the current request and returns the question to the prompt
 - `:LLMRequesterChatSessions` — Selects a saved chat session
 - `:LLMRequesterProcess` — Processes selected text with AI instructions (accepts instructions as parameter)
+- `:LLMRequesterProcessHistoryPrev` — Shows the previous remembered processing prompt
+- `:LLMRequesterProcessHistoryNext` — Shows the next remembered processing prompt (or restores the draft)
 - `:LLMRequesterCompletion` — Shows an LLM completion at the cursor
 - `:LLMRequesterSetOpenaiModel <model-name>` — Sets the chat model
 
