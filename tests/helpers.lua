@@ -37,6 +37,10 @@ function Test.fail(message)
     record_failure(message)
 end
 
+function Test.wait_for(predicate, timeout)
+    return vim.wait(timeout or 2000, predicate, 10)
+end
+
 function Test.report()
     if #Test.failures > 0 then
         print(string.format('FAILED: %d failure(s), %d assertion(s)', #Test.failures, Test.assertions))

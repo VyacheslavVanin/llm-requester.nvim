@@ -5,6 +5,7 @@ local utils = require('llm-requester.utils')
 local Store = require('llm-requester.chat.store')
 local Client = require('llm-requester.chat.client')
 local Agent = require('llm-requester.chat.agent')
+local Compaction = require('llm-requester.chat.compaction')
 local Stats = require('llm-requester.chat.stats')
 local Ui = require('llm-requester.chat.ui')
 
@@ -38,6 +39,11 @@ Chat.default_config = {
     stop_keys = '<leader>cx',
     close_keys = '<leader>q',
     clear_keys = '<leader>cc',
+    compact_keys = '', -- empty by default; :LLMRequesterChatCompact is always available
+
+    -- Context compaction defaults live in llm-requester.chat.compaction so
+    -- there is a single source of truth.
+    compaction = vim.deepcopy(Compaction.defaults),
 
     sessions_dir = vim.fn.stdpath('cache') .. '/llm-requester/sessions',
     continue_last_session = true,
@@ -79,6 +85,7 @@ local state = {
     process = nil,
     agent = nil,
     pending = false,
+    compacting = false,
     generation = 0,
     stream_text = '',
     current_user_text = nil,
@@ -144,6 +151,7 @@ end
 local function cancel_request()
     state.generation = state.generation + 1
     state.pending = false
+    state.compacting = false
     state.stream_text = ''
     state.current_user_text = nil
 
@@ -182,6 +190,10 @@ end
 
 local function track_usage(session, usage)
     session:add_usage(usage)
+    session:set_context_tokens(
+        (tonumber(usage.input) or 0) + (tonumber(usage.output) or 0),
+        #session.messages
+    )
     local speed = state.stats:on_usage(usage)
     if speed then
         Ui.set_speed(session, speed)
@@ -197,6 +209,64 @@ local function finish_speed(session)
     end
 end
 
+-- Options used to estimate and compact the current conversation.
+local function compaction_request_options(session)
+    local system_prompt
+    if session and session.mode == 'agent' then
+        local root = session.root or session.cwd or vim.fn.getcwd()
+        system_prompt = Agent.build_system_prompt(config.agent or {}, root)
+    else
+        system_prompt = config.system_prompt or ''
+    end
+
+    return {
+        system_prompt = system_prompt,
+        context = make_editor_context(),
+    }
+end
+
+-- Shared entry point for manual and automatic compaction. The caller owns the
+-- decision to compact; this function only runs the job and reports the result.
+local function start_compaction(session, generation, manual, on_done)
+    state.compacting = true
+    state.process = nil
+
+    Ui.append_notice(Compaction.format_progress(manual and #session.messages or nil))
+
+    local job = Compaction.compact(session, config, compaction_request_options(session), function(ok, result)
+        if generation ~= state.generation then
+            return
+        end
+
+        state.compacting = false
+        state.process = nil
+
+        if ok and type(result) == 'table' and result.skipped then
+            if manual then
+                Ui.append_notice('[nothing to compact]')
+                notify('nothing to compact')
+            end
+        elseif ok and type(result) == 'table' then
+            save_session()
+            Ui.append_notice(Compaction.format_notice(result))
+            if manual then
+                notify('context compacted')
+            end
+        else
+            Ui.append_notice(Compaction.format_failure(result))
+            notify('context compaction failed: ' .. tostring(result), vim.log.levels.WARN)
+        end
+
+        if on_done then
+            on_done()
+        end
+    end)
+
+    if state.compacting then
+        state.process = job
+    end
+end
+
 function Chat.setup(user_config)
     config = vim.tbl_deep_extend('force', vim.deepcopy(Chat.default_config), user_config or {})
     config.sessions_dir = vim.fn.expand(config.sessions_dir)
@@ -207,6 +277,7 @@ function Chat.setup(user_config)
         on_stop = Chat.stop,
         on_close = Chat.close,
         on_clear = Chat.new_session,
+        on_compact = Chat.compact,
     })
 
     local commands = {
@@ -214,6 +285,7 @@ function Chat.setup(user_config)
         { 'LLMRequesterAgent', Chat.open_agent },
         { 'LLMRequesterChatNew', Chat.new_session },
         { 'LLMRequesterChatStop', Chat.stop },
+        { 'LLMRequesterChatCompact', Chat.compact },
         { 'LLMRequesterChatSessions', Chat.select_session },
     }
 
@@ -282,6 +354,18 @@ function Chat.close()
 end
 
 function Chat.stop()
+    if state.compacting and not state.pending then
+        cancel_request()
+
+        if Ui.is_open() then
+            Ui.append_notice('[context compaction stopped]')
+            Ui.focus_prompt()
+        end
+
+        notify('context compaction stopped')
+        return
+    end
+
     if not state.pending then
         notify('no active request', vim.log.levels.WARN)
         return
@@ -318,6 +402,43 @@ function Chat.stop()
     end
 
     notify('request stopped')
+end
+
+---Compacts the current session regardless of the token threshold.
+function Chat.compact()
+    if state.compacting then
+        notify('context compaction is already in progress', vim.log.levels.WARN)
+        return
+    end
+
+    if state.pending then
+        notify('a request is in progress; stop it before compacting', vim.log.levels.WARN)
+        return
+    end
+
+    if not Compaction.is_enabled(config) then
+        notify('context compaction is disabled', vim.log.levels.WARN)
+        return
+    end
+
+    local session = state.session or ensure_session('chat')
+    if not session or session:is_empty() then
+        notify('nothing to compact', vim.log.levels.WARN)
+        return
+    end
+
+    if not Ui.is_open() then
+        Ui.open(session)
+    end
+
+    state.generation = state.generation + 1
+    local generation = state.generation
+
+    start_compaction(session, generation, true, function()
+        if Ui.is_open() then
+            Ui.focus_prompt()
+        end
+    end)
 end
 
 function Chat.new_session()
@@ -532,8 +653,38 @@ local function send_agent(session, generation)
     }, make_editor_context())
 end
 
+-- Applies automatic compaction before a chat request. Agent sessions compact
+-- inside their own request loop, between tool rounds.
+local function maybe_compact_then_send(session, generation)
+    if not Compaction.is_auto_enabled(config) then
+        send_chat(session, generation)
+        return
+    end
+
+    local reached, tokens = Compaction.should_compact(
+        session,
+        config,
+        compaction_request_options(session)
+    )
+    if not reached then
+        send_chat(session, generation)
+        return
+    end
+
+    notify(string.format('context is near the limit (~%d tokens); compacting', tokens))
+
+    start_compaction(session, generation, false, function()
+        send_chat(session, generation)
+    end)
+end
+
 function Chat.send()
     if not Ui.is_open() then
+        return
+    end
+
+    if state.compacting then
+        notify('context compaction is in progress', vim.log.levels.WARN)
         return
     end
 
@@ -564,7 +715,7 @@ function Chat.send()
     if session.mode == 'agent' then
         send_agent(session, generation)
     else
-        send_chat(session, generation)
+        maybe_compact_then_send(session, generation)
     end
 end
 

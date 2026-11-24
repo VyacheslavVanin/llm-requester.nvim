@@ -135,9 +135,11 @@ local function setup_keymaps()
     map(state.prompt_buf, 'n', config.stop_keys, handlers.on_stop, 'Stop LLM request')
     map(state.prompt_buf, 'n', config.close_keys, handlers.on_close, 'Close LLM chat')
     map(state.prompt_buf, 'n', config.clear_keys, handlers.on_clear, 'Start a new LLM chat')
+    map(state.prompt_buf, 'n', config.compact_keys, handlers.on_compact, 'Compact chat context')
     map(state.response_buf, 'n', config.stop_keys, handlers.on_stop, 'Stop LLM request')
     map(state.response_buf, 'n', config.close_keys, handlers.on_close, 'Close LLM chat')
     map(state.response_buf, 'n', config.clear_keys, handlers.on_clear, 'Start a new LLM chat')
+    map(state.response_buf, 'n', config.compact_keys, handlers.on_compact, 'Compact chat context')
 end
 
 local function set_buffer_name(buf, name)
@@ -289,6 +291,15 @@ function Ui.render(session)
 
     state.speed = nil
     utils.show_in_buf(state.response_buf, {})
+
+    if session.compaction and type(session.compaction.summary) == 'string' then
+        utils.append_to_buf(state.response_buf, {
+            string.format(
+                '[earlier context compacted: %d messages summarized]',
+                tonumber(session.compaction.compacted_messages) or 0
+            ),
+        })
+    end
 
     local results_by_id = {}
     for _, message in ipairs(session.messages or {}) do

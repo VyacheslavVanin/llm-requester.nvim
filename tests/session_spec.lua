@@ -148,3 +148,89 @@ do
     Test.eq(Session.from_table({}), nil, 'invalid session is rejected')
     Test.eq(Session.from_table({ id = 'x', messages = 'nope' }), nil, 'invalid messages are rejected')
 end
+
+do
+    local session = Session.new({
+        id = 'session-compaction',
+        messages = {
+            { role = 'user', content = 'task' },
+            { role = 'user', content = 'latest' },
+        },
+        compaction = {
+            summary = 'a summary',
+            updated_at = 10,
+            compacted_messages = 3,
+            model = 'model',
+        },
+        context_tokens = 120,
+        context_messages = 4,
+    })
+
+    Test.eq(session.version, 3, 'new sessions use the current format version')
+    Test.eq(session.compaction.summary, 'a summary', 'compaction summary is loaded')
+    Test.eq(session.context_tokens, 120, 'measured context tokens are loaded')
+    Test.eq(session.context_messages, 4, 'measured context message count is loaded')
+
+    local restored = Session.from_table(session:to_table())
+    Test.truthy(restored, 'session with compaction roundtrips')
+    Test.eq(restored.compaction, session.compaction, 'compaction survives roundtrip')
+    Test.eq(restored.context_tokens, 120, 'context tokens survive roundtrip')
+    Test.eq(restored.context_messages, 4, 'context message count survives roundtrip')
+
+    local built = restored:build_messages('SYSTEM', 'CONTEXT')
+    Test.eq(#built, 5, 'summary and context are added to the request')
+    Test.eq(built[1].content, 'SYSTEM', 'system prompt comes first')
+    Test.eq(built[2].role, 'system', 'summary is a system message')
+    Test.truthy(built[2].content:find('a summary', 1, true), 'summary content is injected')
+    Test.eq(built[3].content, 'additional_context:\nCONTEXT', 'editor context follows the summary')
+    Test.eq(built[4].content, 'task', 'history follows the injected messages')
+
+    Test.eq(Session.from_table({
+        id = 'bad-compaction',
+        messages = {},
+        compaction = { summary = '' },
+        context_tokens = -1,
+    }).compaction, nil, 'empty summaries are rejected')
+end
+
+do
+    local session = Session.new({
+        id = 'session-apply-compaction',
+        messages = {
+            { role = 'user', content = 'task' },
+            { role = 'assistant', content = 'old' },
+            { role = 'user', content = 'latest' },
+        },
+    })
+    session:set_context_tokens(2000, 3)
+
+    local applied = session:apply_compaction('summary text', {
+        { role = 'user', content = 'task' },
+        { role = 'user', content = 'latest' },
+    }, { compacted_messages = 1, model = 'model' })
+
+    Test.eq(applied, true, 'compaction is applied')
+    Test.eq(#session.messages, 2, 'compacted messages replace the history')
+    Test.eq(session.compaction.summary, 'summary text', 'summary is stored')
+    Test.eq(session.compaction.compacted_messages, 1, 'summarized count is stored')
+    Test.eq(session.compaction.model, 'model', 'model is stored')
+    Test.eq(session.context_tokens, nil, 'measured context is reset')
+    Test.eq(session.context_messages, nil, 'measured message count is reset')
+
+    session:apply_compaction('second summary', { { role = 'user', content = 'task' } }, {
+        compacted_messages = 2,
+    })
+    Test.eq(session.compaction.compacted_messages, 3, 'summarized count accumulates')
+    Test.eq(session.compaction.summary, 'second summary', 'summary is replaced')
+
+    Test.eq(
+        session:apply_compaction('', {}, {}),
+        false,
+        'an empty summary is not applied'
+    )
+    Test.eq(
+        session:apply_compaction('text', 'not a table', {}),
+        false,
+        'invalid messages are not applied'
+    )
+end

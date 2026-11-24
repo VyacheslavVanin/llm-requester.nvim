@@ -40,6 +40,39 @@ local function normalize_tool_calls(value)
     return #calls > 0 and calls or nil
 end
 
+local function normalize_count(value)
+    local number = tonumber(value)
+    if not number or number < 0 then
+        return nil
+    end
+    return math.floor(number)
+end
+
+local function make_compaction(summary, compacted_messages, model, updated_at)
+    return {
+        summary = summary,
+        updated_at = tonumber(updated_at) or os.time(),
+        compacted_messages = normalize_count(compacted_messages) or 0,
+        model = type(model) == 'string' and model ~= '' and model or nil,
+    }
+end
+
+local function normalize_compaction(value)
+    if type(value) ~= 'table' then
+        return nil
+    end
+    if type(value.summary) ~= 'string' or value.summary == '' then
+        return nil
+    end
+
+    return make_compaction(
+        value.summary,
+        value.compacted_messages,
+        value.model,
+        value.updated_at
+    )
+end
+
 local function normalize_message(message)
     if type(message) ~= 'table' then
         return nil
@@ -100,7 +133,7 @@ function Session.new(options)
     local cwd = options.cwd or vim.fn.getcwd()
 
     return setmetatable({
-        version = 2,
+        version = 3,
         id = options.id,
         created_at = options.created_at or os.time(),
         updated_at = options.updated_at or os.time(),
@@ -109,6 +142,9 @@ function Session.new(options)
         mode = options.mode == 'agent' and 'agent' or 'chat',
         model = options.model or '',
         usage = type(options.usage) == 'table' and options.usage or nil,
+        compaction = normalize_compaction(options.compaction),
+        context_tokens = normalize_count(options.context_tokens),
+        context_messages = normalize_count(options.context_messages),
         messages = messages,
     }, Session)
 end
@@ -130,6 +166,9 @@ function Session.from_table(value)
         mode = value.mode,
         model = type(value.model) == 'string' and value.model or '',
         usage = type(value.usage) == 'table' and value.usage or nil,
+        compaction = value.compaction,
+        context_tokens = value.context_tokens,
+        context_messages = value.context_messages,
         messages = value.messages,
     })
 end
@@ -145,6 +184,9 @@ function Session:to_table()
         mode = self.mode,
         model = self.model,
         usage = self.usage,
+        compaction = self.compaction,
+        context_tokens = self.context_tokens,
+        context_messages = self.context_messages,
         messages = self.messages,
     }
 end
@@ -217,6 +259,47 @@ function Session:add_usage(usage)
     self.usage = total
 end
 
+-- Records the context size reported by the provider for the last request.
+-- `message_count` is the number of history messages the measurement covers,
+-- so later messages can be added to the estimate.
+function Session:set_context_tokens(tokens, message_count)
+    local number = tonumber(tokens)
+    if not number or number < 0 then
+        return
+    end
+
+    self.context_tokens = math.floor(number)
+    self.context_messages = normalize_count(message_count)
+end
+
+-- Replaces the history with `messages` and stores the summary that covers the
+-- removed part. The summary is injected as a system message in requests.
+function Session:apply_compaction(summary, messages, meta)
+    if type(summary) ~= 'string' or summary == '' or type(messages) ~= 'table' then
+        return false
+    end
+
+    meta = meta or {}
+
+    local normalized = {}
+    for _, message in ipairs(messages) do
+        local value = normalize_message(message)
+        if value then
+            table.insert(normalized, value)
+        end
+    end
+
+    local previous = self.compaction and self.compaction.compacted_messages or 0
+    local added = normalize_count(meta.compacted_messages) or 0
+    self.compaction = make_compaction(summary, previous + added, meta.model)
+    self.messages = normalized
+    self.context_tokens = nil
+    self.context_messages = nil
+    self:touch()
+
+    return true
+end
+
 -- Removes the last user message. Used when a request is stopped before an
 -- assistant reply was produced, so the user can resend the prompt without
 -- duplicating history. Returns the removed text, or nil when there is nothing
@@ -259,6 +342,14 @@ function Session:build_messages(system_prompt, context)
 
     if type(system_prompt) == 'string' and system_prompt ~= '' then
         table.insert(messages, { role = 'system', content = system_prompt })
+    end
+
+    if self.compaction and type(self.compaction.summary) == 'string' and self.compaction.summary ~= '' then
+        table.insert(messages, {
+            role = 'system',
+            content = 'Summary of the earlier conversation (older messages were compacted):\n'
+                .. self.compaction.summary,
+        })
     end
 
     if type(context) == 'string' and context ~= '' then

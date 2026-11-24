@@ -74,6 +74,21 @@ require('llm-requester').setup({
         stop_keys = '<leader>cx',
         close_keys = '<leader>q',
         clear_keys = '<leader>cc',
+        compact_keys = '',  -- optional keymap for :LLMRequesterChatCompact
+
+        -- Context compaction (see "Context Compaction" below)
+        compaction = {
+            enabled = true,
+            auto = true,              -- compact automatically near the limit
+            threshold = 0.9,          -- fraction of max_context_tokens
+            max_context_tokens = 128000, -- set to your model's context window
+            keep_recent_tokens = 8000,   -- recent messages kept verbatim
+            max_summary_tokens = 1500,   -- target summary size
+            max_message_chars = 4000,     -- per-message cap for the summary input
+            model = nil,               -- summarizer model (default: openai_model)
+            system_prompt = nil,       -- override the built-in summary instructions
+            prompt = nil,              -- override the built-in summary template
+        },
 
         -- Chat history storage
         sessions_dir = vim.fn.stdpath('cache') .. '/llm-requester/sessions',
@@ -152,7 +167,8 @@ Each chat session is stored as a separate JSON file in `sessions_dir`
 
 - Only user/assistant messages (and, in agent sessions, tool calls and their
   results) are stored; the system prompt and editor context are added to
-  requests at runtime.
+  requests at runtime. The compaction summary and the last measured context
+  size are stored as session metadata; see "Context Compaction".
 - API keys are never written to session files.
 - `clear_keys` / `:LLMRequesterChatNew` starts a new session and keeps the old
   one available on disk.
@@ -170,6 +186,41 @@ Each chat session is stored as a separate JSON file in `sessions_dir`
 - `stall_timeout` (default `nil`) aborts the request if the provider stops
   sending data for the configured number of seconds.
 - `timeout` (default `nil`) is an overall request deadline.
+
+## Context Compaction
+
+Long conversations eventually fill the model's context window. Compaction
+replaces the older part of the conversation with a structured summary, so the
+chat can continue without losing the thread.
+
+Compaction can be triggered in two ways:
+
+- automatically before a request when the context reaches `threshold` of
+  `max_context_tokens` (default: 90% of 128000 tokens). Agent sessions check
+  before every tool round, not only before a new user message;
+- manually with `:LLMRequesterChatCompact` (or `compact_keys` if configured).
+
+What is preserved:
+
+- the **first user message (the original task) is always kept verbatim**;
+- the most recent messages (about `keep_recent_tokens` tokens) are kept
+  verbatim, cut on a user/assistant boundary so tool calls and their results
+  are never separated;
+- everything else is summarized. The summary prompt asks for the goal, the
+  numbered plan with done/current/pending stages, every distinct user remark,
+  correction and answer (exact repetitions are collapsed), completed work,
+  the last agent action and the next step, key paths and open questions;
+- the summary is stored on the session and injected as a system message, so it
+  survives restarts and repeated compactions merge into the previous summary.
+
+If the dropped part does not fit into one request, it is summarized in chunks
+and the running summary is carried from chunk to chunk. When the compaction
+request fails, the session is left untouched and the normal request proceeds
+with a warning. Stopping the request (`<leader>cx` / `:LLMRequesterChatStop`)
+also cancels an in-progress manual compaction.
+
+`max_context_tokens` is not discovered from the provider: set it to the context
+window of your model. Compaction itself never streams and never sends tools.
 
 ## Agent Mode
 
@@ -277,6 +328,7 @@ nor `api_key_file` is configured.
 - `<leader>cx`: Stop the current request (the question is returned to the prompt)
 - `<leader>q`: Close windows
 - `<leader>cc`: Start a new chat (previous history is kept on disk)
+- `compact_keys` (empty by default): optional keymap for context compaction
 
 ### Completion
 
@@ -289,6 +341,7 @@ nor `api_key_file` is configured.
 - `:LLMRequesterAgent` — Opens an agent chat window (files, directories, commands)
 - `:LLMRequesterChatNew` — Starts a new chat session
 - `:LLMRequesterChatStop` — Stops the current request and returns the question to the prompt
+- `:LLMRequesterChatCompact` — Compacts the current chat context into a summary
 - `:LLMRequesterChatSessions` — Selects a saved chat session
 - `:LLMRequesterProcess` — Processes selected text with AI instructions (accepts instructions as parameter)
 - `:LLMRequesterProcessHistoryPrev` — Shows the previous remembered processing prompt

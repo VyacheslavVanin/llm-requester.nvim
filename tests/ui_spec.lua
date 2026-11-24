@@ -86,3 +86,59 @@ Test.eq(vim.wo[second_response_win].foldmethod, 'expr', 'folds are restored afte
 Test.eq(vim.bo[second_prompt_buf].textwidth, 0, 'prompt textwidth is restored after reopening')
 
 Ui.close()
+
+do
+    local compacted = Session.new({
+        id = 'ui-compacted',
+        cwd = vim.fn.getcwd(),
+        messages = {
+            { role = 'user', content = 'original task' },
+            { role = 'user', content = 'latest question' },
+        },
+        compaction = {
+            summary = '## Goal\nfinish the task',
+            compacted_messages = 4,
+        },
+    })
+
+    Ui.setup({
+        split_ratio = 0.5,
+        prompt_split_ratio = 0.2,
+        response_wrap = true,
+        prompt_wrap = true,
+        tool_folds = true,
+        tool_folds_closed = true,
+        show_speed = true,
+        compact_keys = '<leader>ck',
+    }, {
+        on_send = function() end,
+        on_stop = function() end,
+        on_close = function() end,
+        on_clear = function() end,
+        on_compact = function() end,
+    })
+
+    Ui.open(compacted)
+    local compact_prompt_win, compact_response_win = Ui.windows()
+    local response_buf = api.nvim_win_get_buf(compact_response_win)
+    local lines = api.nvim_buf_get_lines(response_buf, 0, -1, false)
+
+    local marker = false
+    for _, line in ipairs(lines) do
+        if line:find('earlier context compacted: 4 messages', 1, true) then
+            marker = true
+        end
+    end
+    Test.truthy(marker, 'compacted sessions show a marker')
+
+    local mappings = api.nvim_buf_get_keymap(api.nvim_win_get_buf(compact_prompt_win), 'n')
+    local found = false
+    for _, mapping in ipairs(mappings) do
+        if mapping.desc == 'Compact chat context' then
+            found = true
+        end
+    end
+    Test.truthy(found, 'compact_keys installs the compaction keymap when configured')
+
+    Ui.close()
+end

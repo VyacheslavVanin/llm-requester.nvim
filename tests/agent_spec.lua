@@ -253,4 +253,70 @@ do
     Test.eq(#session.messages, 1, 'cancel lets Chat roll the exchange back')
 end
 
+do
+    requests = {}
+    queue = {
+        { content = 'fake summary' },
+        { content = 'after compaction' },
+    }
+
+    local session = Session.new({ id = 'agent-compaction', cwd = root, mode = 'agent' })
+    session:add_user('original task')
+    session:add_assistant(string.rep('old work ', 200))
+    session:add_user('latest question')
+
+    local agent = Agent.new({
+        session = session,
+        config = {
+            openai_url = 'http://localhost',
+            openai_model = 'model',
+            stream = false,
+            agent = {
+                max_tool_iterations = 8,
+                system_prompt = 'agent system prompt',
+            },
+            compaction = {
+                enabled = true,
+                auto = true,
+                threshold = 0.1,
+                max_context_tokens = 1000,
+                keep_recent_tokens = 20,
+                max_summary_tokens = 100,
+            },
+        },
+    })
+
+    local notices = {}
+    local finished = run(agent, {
+        on_notice = function(message)
+            table.insert(notices, message)
+        end,
+    })
+
+    Test.eq(finished, 'after compaction', 'the exchange continues after compaction')
+    Test.eq(#requests, 2, 'a summary request is followed by the normal agent request')
+    Test.eq(#requests[1].messages, 2, 'the summary request has system and user messages only')
+    Test.eq(requests[1].tools, nil, 'the summary request does not declare tools')
+    Test.truthy(
+        requests[1].messages[2].content:find('original task', 1, true),
+        'the original task is passed to the summarizer'
+    )
+    Test.eq(requests[1].config.stream, false, 'the summary request is not streamed')
+
+    local injected = false
+    for _, message in ipairs(requests[2].messages) do
+        if message.role == 'system' and tostring(message.content):find('fake summary', 1, true) then
+            injected = true
+        end
+    end
+    Test.truthy(injected, 'the summary is injected into the next agent request')
+    Test.truthy(#requests[2].tools > 0, 'tool declarations are kept after compaction')
+    Test.eq(session.messages[1].content, 'original task', 'the original task is kept verbatim')
+    Test.eq(session.compaction.summary, 'fake summary', 'the summary is stored on the session')
+    Test.truthy(
+        table.concat(notices, '\n'):find('context compacted', 1, true),
+        'compaction is announced in the chat'
+    )
+end
+
 vim.fn.delete(base, 'rf')

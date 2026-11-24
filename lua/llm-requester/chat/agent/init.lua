@@ -6,6 +6,7 @@
 -- llm-requester.chat.
 
 local Client = require('llm-requester.chat.client')
+local Compaction = require('llm-requester.chat.compaction')
 local Paths = require('llm-requester.chat.agent.paths')
 local Permissions = require('llm-requester.chat.agent.permissions')
 local Tools = require('llm-requester.chat.agent.tools')
@@ -36,7 +37,10 @@ local function truncate(text, limit)
     return value:sub(1, limit) .. '\n... truncated in stored session ...'
 end
 
-local function build_system_prompt(agent_config, root)
+---Builds the full system prompt for an agent root directory.
+---@param agent_config table
+---@param root string
+function Agent.build_system_prompt(agent_config, root)
     local prompt = type(agent_config.system_prompt) == 'string' and agent_config.system_prompt or ''
     return table.concat({
         prompt,
@@ -63,6 +67,12 @@ function Agent.new(options)
     })
     local base_max_rounds = math.max(1, math.floor(tonumber(agent_config.max_tool_iterations) or DEFAULT_MAX_ROUNDS))
 
+    local tool_specs_tokens = 0
+    local encoded_ok, encoded = pcall(vim.json.encode, Tools.specs())
+    if encoded_ok and type(encoded) == 'string' then
+        tool_specs_tokens = Compaction.estimate_text_tokens(encoded)
+    end
+
     return setmetatable({
         config = config,
         session = session,
@@ -70,6 +80,10 @@ function Agent.new(options)
         events = {},
         pending = false,
         process = nil,
+        compacting = false,
+        compaction_attempted = false,
+        compaction_process = nil,
+        tool_specs_tokens = tool_specs_tokens,
         token = 0,
         rounds = 0,
         context = '',
@@ -99,8 +113,67 @@ function Agent:_stale(token)
     return token ~= self.token or not self.pending
 end
 
+function Agent:_compaction_options()
+    return {
+        system_prompt = Agent.build_system_prompt(self.config.agent or {}, self.root),
+        context = self.context,
+        extra_tokens = self.tool_specs_tokens,
+    }
+end
+
+function Agent:_should_compact()
+    if self.compacting or self.compaction_attempted then
+        return false
+    end
+
+    if not Compaction.is_auto_enabled(self.config) then
+        return false
+    end
+
+    return Compaction.should_compact(self.session, self.config, self:_compaction_options())
+end
+
+function Agent:_compact(token)
+    self.compacting = true
+    self:_emit('on_notice', Compaction.format_progress())
+
+    local job
+    job = Compaction.compact(self.session, self.config, self:_compaction_options(), function(ok, result)
+        if self.compaction_process == job then
+            self.compaction_process = nil
+        end
+        self.compacting = false
+
+        if self:_stale(token) then
+            return
+        end
+
+        if ok and type(result) == 'table' and result.skipped then
+            -- Nothing could be compacted; continue the exchange.
+        elseif ok and type(result) == 'table' then
+            self.compaction_attempted = false
+            self:_emit('on_change')
+            self:_emit('on_notice', Compaction.format_notice(result))
+        else
+            self:_emit('on_notice', Compaction.format_failure(result))
+        end
+
+        self:_request(token)
+    end)
+
+    if self.compacting then
+        self.compaction_process = job
+    end
+end
+
 function Agent:_request(token)
     if self:_stale(token) then
+        return
+    end
+
+    if self:_should_compact() then
+        self.compaction_attempted = true
+        self:_compact(token)
         return
     end
 
@@ -108,7 +181,7 @@ function Agent:_request(token)
     self:_emit('on_assistant_start')
 
     local messages = self.session:build_messages(
-        build_system_prompt(self.config.agent or {}, self.root),
+        Agent.build_system_prompt(self.config.agent or {}, self.root),
         self.context
     )
 
@@ -285,6 +358,15 @@ function Agent:send(events, context)
     self.token = self.token + 1
     self.rounds = 0
     self.max_rounds = self.base_max_rounds
+    self.compaction_attempted = false
+    self.compacting = false
+
+    if self.compaction_process then
+        pcall(function()
+            self.compaction_process:kill(9)
+        end)
+        self.compaction_process = nil
+    end
 
     local token = self.token
     self:_request(token)
@@ -299,6 +381,14 @@ end
 function Agent:cancel()
     self.token = self.token + 1
     self.pending = false
+    self.compacting = false
+
+    if self.compaction_process then
+        pcall(function()
+            self.compaction_process:kill(9)
+        end)
+        self.compaction_process = nil
+    end
 
     if self.process then
         pcall(function()
