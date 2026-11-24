@@ -30,6 +30,25 @@ Install using your preferred Neovim package manager.
 - Trigger completions with `<C-Tab>` in insert mode.
 - Confirm selection with `<Tab>`.
 - Context-aware suggestions based on surrounding code.
+- While a completion popup is visible, the trigger does not start the LLM
+  completion. It returns `<C-p>` instead, so the popup keeps its normal
+  previous-item navigation (YCM/nvim-cmp).
+- The trigger is installed as a **global** insert-mode mapping and re-applied
+  on `BufEnter`/`InsertEnter`. This matters when another plugin temporarily
+  owns the same key with a buffer-local mapping: that mapping keeps priority
+  while it exists, and the LLM trigger becomes active again as soon as the
+  plugin removes it. For example, llama.vim maps `<S-Tab>` to accept a line
+  only while a ghost-text suggestion is shown. If you want `<S-Tab>` to belong
+  exclusively to this plugin, remap or disable `llama.vim`'s
+  `keymap_fim_accept_line`.
+
+  ```lua
+  completion = {
+      keys = {
+          trigger = '<S-Tab>', -- or keep the default <C-Tab>
+      },
+  }
+  ```
 
 ### Text Processing
 

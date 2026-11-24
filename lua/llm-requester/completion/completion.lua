@@ -69,16 +69,50 @@ User wants calculate sum of array vlues so .... User already have ```return tota
 
 ]]
 
-local function setup_completion_autocmd()
-    vim.api.nvim_create_autocmd('BufEnter', {
-        callback = function()
-            local buf = vim.api.nvim_get_current_buf()
-            vim.keymap.set('i', config.keys.trigger, function()
-                vim.schedule(Completion.show)
-                return ''
-            end, { buffer = buf, expr = true, desc = "Show LLM Completion" })
+-- With a popup menu open the trigger must not start the LLM completion.
+-- <C-p> keeps the usual "previous item" navigation (YCM/nvim-cmp behaviour).
+local POPUP_NAVIGATION_KEY = '<C-p>'
+
+local function on_trigger()
+    if fn.pumvisible() == 1 then
+        -- Avoid an infinite loop when the trigger is the navigation key itself
+        -- and returned keys are remapped.
+        if config.keys.trigger == POPUP_NAVIGATION_KEY then
+            return ''
         end
+        return api.nvim_replace_termcodes(POPUP_NAVIGATION_KEY, true, false, true)
+    end
+
+    vim.schedule(Completion.show)
+    return ''
+end
+
+-- The trigger is global on purpose. Completion and FIM plugins often install
+-- temporary buffer-local mappings for the same key (llama.vim uses <S-Tab> to
+-- accept a line) and remove them later. A buffer-local trigger would be
+-- removed together with such a mapping; a global one stays in place and
+-- becomes active again, while an active buffer-local mapping keeps priority.
+local function install_trigger()
+    vim.keymap.set('i', config.keys.trigger, on_trigger, {
+        expr = true,
+        remap = true,
+        desc = 'Show LLM Completion',
     })
+end
+
+local function setup_completion_autocmd()
+    local group = api.nvim_create_augroup('LLMRequesterCompletion', { clear = true })
+
+    -- Re-assert the global mapping after other plugins had a chance to install
+    -- theirs (YCM sets its global mappings on VimEnter; some plugins do it on
+    -- InsertEnter). Buffer-local mappings still keep priority.
+    api.nvim_create_autocmd({ 'BufEnter', 'InsertEnter' }, {
+        group = group,
+        callback = install_trigger,
+    })
+
+    -- Events for the initial buffer may have fired before setup.
+    install_trigger()
 end
 
 function Completion.setup(user_config)
@@ -87,7 +121,10 @@ function Completion.setup(user_config)
     config = merged
     setup_completion_autocmd()
 
-    vim.api.nvim_create_user_command('LLMRequesterCompletion', Completion.show, { range = true })
+    api.nvim_create_user_command('LLMRequesterCompletion', Completion.show, {
+        range = true,
+        force = true,
+    })
 end
 
 
